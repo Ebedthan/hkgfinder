@@ -12,13 +12,7 @@
 
 ### Installation
 
-#### Install from Pip
-
 You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run butler.
-
-```bash
-pip install butler
-```
 
 
 #### Install from source

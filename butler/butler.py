@@ -336,7 +336,7 @@ def main():
     if args.faa or args.fna:
         import pyfastx
 
-        prots = pyfastx.Fasta(Path(butler_temp.name, "my.proteins.faa"))
+        prots = pyfastx.Fasta(str(Path(butler_temp.name, "my.proteins.faa")))
         nl = "\n"
 
         if args.faa:
@@ -358,7 +358,9 @@ def main():
             mg = ""
 
             if from_stdin:
-                mg = pyfastx.Fasta(Path(butler_temp.name, "butler_input.fa"))
+                mg = pyfastx.Fasta(
+                    str(Path(butler_temp.name, "butler_input.fa"))
+                )
             else:
                 mg = pyfastx.Fasta(args.file.name)
 
