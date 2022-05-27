@@ -15,6 +15,7 @@ import fileinput
 import os
 from pathlib import Path
 import platform
+import pyfastx
 from random import randrange
 from subprocess import run
 import sys
@@ -49,11 +50,6 @@ parser.add_argument(
 )
 parser.add_argument(
     "-a", action="store_true", help="activate anonymous mode [false]"
-)
-parser.add_argument(
-    "-x",
-    action="store_true",
-    help="deactivate protein-coding gene prediction [false]",
 )
 parser.add_argument(
     "--faa",
@@ -151,12 +147,34 @@ def main():
         binput.close()
     else:
         infile_type = get_file_type(args.file.name)
-        if infile_type not in ["gz", "uncompressed"]:
+        if infile_type not in ["gz", "unknown"]:
             err(
                 f"Input file compression ({infile_type})"
                 + " is not currently supported"
             )
             sys.exit(1)
+
+    # Check Alphabet of supplied sequences
+    fa = ""
+    is_prot = False
+    if args.file.name == "<stdin>":
+        fa = pyfastx.Fasta(str(Path(butler_temp.name, "butler_input.fa")))
+    else:
+        fa = pyfastx.Fasta(args.file.name)
+
+    if fa.type not in ["DNA", "protein"]:
+        err("Supplied file should be a DNA or protein file")
+        sys.exit(1)
+
+    if fa.type == "protein":
+        is_prot = True
+
+    if is_prot and args.fna:
+        err(
+            "Cannot retrieve matching DNA sequences from protein file. "
+            + "Please remove --fna option"
+        )
+        sys.exit(1)
 
     # Start program ---------------------------------------------------------
     msg(f"This is butler {VERSION}")
@@ -169,8 +187,6 @@ def main():
         msg("You are running butler in anonymous mode")
     else:
         msg("You are running butler in normal mode")
-    if args.x:
-        msg("You have requested to skip protein-coding gene prediction")
 
     # Handling number of threads -----------------------------------------------
     cpus = args.t
@@ -198,7 +214,7 @@ def main():
 
     # Running tools -----------------------------------------------------------
     # Predict protein-coding genes
-    if not args.x:
+    if not is_prot:
         msg("Predicting protein-coding genes")
         if args.a:
             if from_stdin:
@@ -262,7 +278,7 @@ def main():
 
     # Classifying sequences into housekkeping genes
     msg("classifying sequences into housekeeping genes")
-    if not args.x:
+    if not is_prot:
         run(
             [
                 "hmmsearch",
@@ -334,10 +350,15 @@ def main():
 
     # Get matched proteins
     if args.faa or args.fna:
-        import pyfastx
-
-        prots = pyfastx.Fasta(str(Path(butler_temp.name, "my.proteins.faa")))
+        prots = ""
         nl = "\n"
+
+        if not is_prot:
+            prots = pyfastx.Fasta(
+                str(Path(butler_temp.name, "my.proteins.faa"))
+            )
+        else:
+            prots = pyfastx.Fasta(args.file.name)
 
         if args.faa:
             msg("Writing out predicted proteins sequences")
