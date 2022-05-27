@@ -50,7 +50,6 @@ usage: butler [options] [<FILE>]
 optional arguments:
   -o [FILE]      output result to FILE [stdout]
   -a             activate anonymous mode [false]
-  -x             deactivate protein-coding gene prediction [false]
   --faa FILE     output matched proteins sequences to FILE
   --fna FILE     output matched DNA sequences to FILE
   -t INT         number of threads [1]
