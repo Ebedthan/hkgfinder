@@ -14,7 +14,7 @@
 
 #### Install from Pip
 
-You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run conodictor.
+You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run butler.
 
 ```bash
 pip install butler
@@ -25,7 +25,7 @@ pip install butler
 
 ```bash
 # Download butler development version
-git clone https://github.com/Ebedthan/butler.git conodictor
+git clone https://github.com/Ebedthan/butler.git butler
 
 # Navigate to directory
 cd butler
@@ -36,7 +36,7 @@ poetry install --no-dev
 # Enter the Python virtual environment with
 poetry shell
 
-# Test conodictor is correctly installed
+# Test butler is correctly installed
 butler -h
 ```
 
