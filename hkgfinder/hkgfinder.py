@@ -5,7 +5,6 @@
 # This file may not be copied, modified, or distributed except according
 # to those terms.
 
-
 import argparse
 from Bio import SearchIO
 from collections import defaultdict
@@ -128,15 +127,15 @@ def main():
             dbdir = (
                 # case when app is installed by cloned repo
                 Path(bindir, "db")
-                # case when path is set by env variable
-                or os.environ["hkgfinderDB"]
                 # case when app is installed through pip
                 or "/usr/local/lib/python3.8/dist-packages/db"
+                # case when path is set by env variable
+                or os.environ["HKGDB"]
             )
         except KeyError:
             print(
                 "Error: HMMs models not found in $PATH. "
-                + "Please set hkgfinderDB environment variable to the path "
+                + "Please set HKGDB environment variable to the path "
                 + "where models are stored. "
                 + "Visit https://github.com/Ebedthan/hkgfinder "
                 + "for more informations.",
@@ -235,7 +234,7 @@ def main():
             sys.exit(1)
 
     # Running tools -----------------------------------------------------------
-    # In genome mode
+    # In genome mode ----------------------------------------------------------
     if args.g:
         utils.msg("Predicting protein-coding genes", is_quiet)
         if from_stdin:
@@ -265,7 +264,7 @@ def main():
                 ]
             )
 
-    # In metagenome mode
+    # In metagenome mode ------------------------------------------------------
     elif args.m:
         utils.msg("Predicting protein-coding genes", is_quiet)
         if from_stdin:
@@ -299,7 +298,7 @@ def main():
                 ]
             )
 
-    # In normal mode
+    # In normal mode ----------------------------------------------------------
     else:
         if fatype == "DNA":
             utils.msg("Translating sequences into 6 frames", is_quiet)
@@ -377,6 +376,8 @@ def main():
     hmmdict = defaultdict(lambda: defaultdict(list))
 
     # Second iteration over output file to get evalues and hsps
+    utils.msg("Parsing HMM result", is_quiet)
+
     with open(Path(hkgfinder_temp.name, "hkgfinder.hmmsearch")) as hmmfile:
         for record in SearchIO.parse(hmmfile, "hmmer3-text"):
             hits = record.hits
