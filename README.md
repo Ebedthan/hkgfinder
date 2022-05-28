@@ -49,7 +49,8 @@ usage: hkgfinder [options] [<FILE>]
 
 optional arguments:
   -o [FILE]      output result to FILE [stdout]
-  -a             activate anonymous mode [false]
+  -g             activate genome mode [false]
+  -m             activate metagenome mode [false]
   --faa FILE     output matched proteins sequences to FILE
   --fna FILE     output matched DNA sequences to FILE
   -t INT         number of threads [1]
