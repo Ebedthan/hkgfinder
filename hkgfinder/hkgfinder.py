@@ -49,8 +49,16 @@ parser.add_argument(
     default=sys.stdout,
     help="output result to FILE [stdout]",
 )
-parser.add_argument(
-    "-a", action="store_true", help="activate anonymous mode [false]"
+group = parser.add_mutually_exclusive_group()
+group.add_argument(
+    "-g",
+    action="store_true",
+    help="activate genome mode [false]",
+)
+group.add_argument(
+    "-m",
+    action="store_true",
+    help="activate metagenome mode [false]",
 )
 parser.add_argument(
     "--faa",
@@ -142,8 +150,8 @@ def main():
     except KeyError:
         user = "not telling me who you are"
 
-        # Handling CLI arguments ---------------------------------------------
-        # Handling input file supply
+    # Handling CLI arguments ---------------------------------------------
+    # Handling input file supply
     from_stdin = False
     if args.file.name == "<stdin>":
         from_stdin = True
@@ -160,24 +168,34 @@ def main():
             )
             sys.exit(1)
 
-        # Check Alphabet of supplied sequences
+    # Check Alphabet of supplied sequences
     fa = ""
-    is_prot = False
     if args.file.name == "<stdin>":
         fa = pyfastx.Fasta(str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")))
     else:
         fa = pyfastx.Fasta(args.file.name)
-    if fa.type not in ["DNA", "protein"]:
+
+    fatype = utils.is_dna_or_aa(fa[0].seq)
+
+    if args.g and fatype == "protein":
+        utils.err("Cannot run genome mode on proteins")
+        sys.exit(1)
+
+    if args.m and fatype == "protein":
+        utils.err("Cannot run metagenome mode on proteins")
+        sys.exit(1)
+
+    if fatype not in ["DNA", "protein"]:
         utils.err("Supplied file should be a DNA or protein file")
         sys.exit(1)
-    if fa.type == "protein":
-        is_prot = True
-    if is_prot and args.fna:
+
+    if fatype == "protein" and args.fna:
         utils.err(
             "Cannot retrieve matching DNA sequences from protein file. "
             + "Please remove --fna option"
         )
         sys.exit(1)
+
     # Start program ---------------------------------------------------------
     utils.msg(f"This is hkgfinder {VERSION}", is_quiet)
     utils.msg(f"Written by {AUTHOR}", is_quiet)
@@ -185,10 +203,13 @@ def main():
     utils.msg(f"Localtime is {datetime.now().strftime('%H:%M:%S')}", is_quiet)
     utils.msg(f"You are {user}", is_quiet)
     utils.msg(f"Operating system is {platform.system()}", is_quiet)
-    if args.a:
-        utils.msg("You are running hkgfinder in anonymous mode", is_quiet)
+    if args.g:
+        utils.msg("You are running hkgfinder in genome mode", is_quiet)
+    elif args.m:
+        utils.msg("You are running hkgfinder in metagenome mode", is_quiet)
     else:
-        utils.msg("You are running hkgfinder in normal mode", is_quiet)
+        utils.msg("You are running kgfinder in normal mode", is_quiet)
+
     # Handling number of threads -----------------------------------------------
     cpus = args.t
     available_cpus = os.cpu_count()
@@ -203,6 +224,7 @@ def main():
         )
         cpus = available_cpus
     utils.msg(f"We will use maximum of {cpus} cores", is_quiet)
+
     # Verify presence of needed tools ---------------------------------------
     needed_tools = ("hmmsearch", "prodigal")
     for tool in needed_tools:
@@ -211,71 +233,89 @@ def main():
         else:
             utils.print_install_tool(tool)
             sys.exit(1)
+
     # Running tools -----------------------------------------------------------
-    # Predict protein-coding genes
-    if not is_prot:
+    # In genome mode
+    if args.g:
         utils.msg("Predicting protein-coding genes", is_quiet)
-        if args.a:
-            if from_stdin:
-                run(
-                    [
-                        "prodigal",
-                        "-q",
-                        "-p",
-                        "anon",
-                        "-o",
-                        Path(hkgfinder_temp.name, "mygenes"),
-                        "-i",
-                        Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                        "-a",
-                        Path(hkgfinder_temp.name, "my.proteins.faa"),
-                    ]
-                )
-            else:
-                run(
-                    [
-                        "prodigal",
-                        "-q",
-                        "-p",
-                        "anon",
-                        "-o",
-                        Path(hkgfinder_temp.name, "mygenes"),
-                        "-i",
-                        str(args.file.name),
-                        "-a",
-                        Path(hkgfinder_temp.name, "my.proteins.faa"),
-                    ]
-                )
+        if from_stdin:
+            run(
+                [
+                    "prodigal",
+                    "-q",
+                    "-o",
+                    Path(hkgfinder_temp.name, "mygenes"),
+                    "-i",
+                    Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
+                    "-a",
+                    Path(hkgfinder_temp.name, "my.proteins.faa"),
+                ]
+            )
         else:
+            run(
+                [
+                    "prodigal",
+                    "-q",
+                    "-o",
+                    Path(hkgfinder_temp.name, "mygenes"),
+                    "-i",
+                    str(args.file.name),
+                    "-a",
+                    Path(hkgfinder_temp.name, "my.proteins.faa"),
+                ]
+            )
+
+    # In metagenome mode
+    elif args.m:
+        utils.msg("Predicting protein-coding genes", is_quiet)
+        if from_stdin:
+            run(
+                [
+                    "prodigal",
+                    "-q",
+                    "-p",
+                    "anon",
+                    "-o",
+                    Path(hkgfinder_temp.name, "mygenes"),
+                    "-i",
+                    Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
+                    "-a",
+                    Path(hkgfinder_temp.name, "my.proteins.faa"),
+                ]
+            )
+        else:
+            run(
+                [
+                    "prodigal",
+                    "-q",
+                    "-p",
+                    "anon",
+                    "-o",
+                    Path(hkgfinder_temp.name, "mygenes"),
+                    "-i",
+                    str(args.file.name),
+                    "-a",
+                    Path(hkgfinder_temp.name, "my.proteins.faa"),
+                ]
+            )
+
+    # In normal mode
+    else:
+        if fatype == "DNA":
+            utils.msg("Translating sequences into 6 frames", is_quiet)
             if from_stdin:
-                run(
-                    [
-                        "prodigal",
-                        "-q",
-                        "-o",
-                        Path(hkgfinder_temp.name, "mygenes"),
-                        "-i",
-                        Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                        "-a",
-                        Path(hkgfinder_temp.name, "my.proteins.faa"),
-                    ]
+                fa = pyfastx.Fasta(
+                    str(Path(hkgfinder_temp.name, "hkgfinder_input.fa"))
                 )
-            else:
-                run(
-                    [
-                        "prodigal",
-                        "-q",
-                        "-o",
-                        Path(hkgfinder_temp.name, "mygenes"),
-                        "-i",
-                        str(args.file.name),
-                        "-a",
-                        Path(hkgfinder_temp.name, "my.proteins.faa"),
-                    ]
-                )
+
+            # translate sequences
+            utils.do_translation(
+                fa, Path(hkgfinder_temp.name, "input_translate.fa")
+            )
+
     # Classifying sequences into housekkeping genes
     utils.msg("classifying sequences into housekeeping genes", is_quiet)
-    if not is_prot:
+    if args.g or args.m:
         run(
             [
                 "hmmsearch",
@@ -290,20 +330,35 @@ def main():
             ]
         )
     else:
-        if from_stdin:
-            run(
-                [
-                    "hmmsearch",
-                    "--cut_ga",
-                    "--cpu",
-                    str(cpus),
-                    "--noali",
-                    "-o",
-                    Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
-                    Path(dbdir, "hkgfinder.hmm"),
-                    Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                ]
-            )
+        if fatype == "protein":
+            if from_stdin:
+                run(
+                    [
+                        "hmmsearch",
+                        "--cut_ga",
+                        "--cpu",
+                        str(cpus),
+                        "--noali",
+                        "-o",
+                        Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
+                        Path(dbdir, "hkgfinder.hmm"),
+                        Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
+                    ]
+                )
+            else:
+                run(
+                    [
+                        "hmmsearch",
+                        "--cut_ga",
+                        "--cpu",
+                        str(cpus),
+                        "--noali",
+                        "-o",
+                        Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
+                        Path(dbdir, "hkgfinder.hmm"),
+                        str(args.file.name),
+                    ]
+                )
         else:
             run(
                 [
@@ -315,10 +370,12 @@ def main():
                     "-o",
                     Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
                     Path(dbdir, "hkgfinder.hmm"),
-                    str(args.file.name),
+                    Path(hkgfinder_temp.name, "input_translate.fa"),
                 ]
             )
+
     hmmdict = defaultdict(lambda: defaultdict(list))
+
     # Second iteration over output file to get evalues and hsps
     with open(Path(hkgfinder_temp.name, "hkgfinder.hmmsearch")) as hmmfile:
         for record in SearchIO.parse(hmmfile, "hmmer3-text"):
@@ -352,14 +409,19 @@ def main():
     if args.faa or args.fna:
         prots = ""
         nl = "\n"
-        if not is_prot:
+        if args.p:
             prots = pyfastx.Fasta(
                 str(Path(hkgfinder_temp.name, "my.proteins.faa"))
             )
         else:
-            prots = pyfastx.Fasta(args.file.name)
+            if fatype == "protein":
+                prots = pyfastx.Fasta(args.file.name)
+            else:
+                prots = fa
+
         if args.faa:
             utils.msg("Writing out predicted proteins sequences", is_quiet)
+
             oprots = open(args.faa, "w")
             for k, v in classif.items():
                 seq = [
@@ -369,8 +431,10 @@ def main():
                 oprots.write(
                     f">{k}_gene={v.split('#')[0]}\n{nl.join(map(str, seq))}\n"
                 )
+
         if args.fna:
             utils.msg("Writing out predicted DNA sequences", is_quiet)
+
             ofna = open(args.fna, "w")
             mg = ""
             if from_stdin:

@@ -5,6 +5,8 @@
 
 from datetime import datetime
 import sys
+from Bio.Seq import reverse_complement, translate
+import warnings
 
 
 def get_file_type(filename):
@@ -87,3 +89,79 @@ def msg(text, is_quiet):
 def warn(text, is_quiet):
     if not is_quiet:
         print(f"[{datetime.now().strftime('%H:%M:%S')}][WARN] {text}")
+
+
+def is_dna_or_aa(s):
+    """
+    is_dna_or_aa test if input sequence is DNA or proteins.
+
+    :s: input sequence
+    """
+
+    dna = "ATCG"
+    prot = "ABCDEFGHIKLMNPQRSTVWYZ*X"
+    stype = ""
+
+    if all(i in dna for i in s):
+        stype = "DNA"
+    elif all(i in prot for i in s):
+        stype = "protein"
+    else:
+        stype = "unknown"
+
+    return stype
+
+
+def _translate_seq(seq):
+    """
+    _translate_seq translate DNA sequence to proteins in the six frames.
+
+    :seq: DNA sequence to translate.
+    """
+
+    seqlist = []
+    # frame 1
+    seqlist.append(translate(seq))
+    # frame 2
+    seqlist.append(translate(seq[1:]))
+    # frame 3
+    seqlist.append(translate(seq[2:]))
+    # frame 4
+    seqlist.append(translate(reverse_complement(seq)))
+    # frame 5
+    seqlist.append(translate(reverse_complement(seq)[1:]))
+    # frame 6
+    seqlist.append(translate(reverse_complement(seq)[2:]))
+
+    return seqlist
+
+
+def do_translation(infile, outfile, sw=60):
+    """
+    do_translation translate a DNA fasta file into proteins
+    fasta file.
+
+    :infile: Pyfasta object.
+    :outfile: Output file.
+    :sw: Sequence width. Default: 60.
+    """
+
+    with open(outfile, "w") as protfile:
+        for sequence in infile:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                protseq = _translate_seq(sequence.seq)
+                for idx, frame in enumerate(protseq):
+                    # Rule E203 from flacke8 check for extraneous whitespace
+                    # before a colon. But black follow PEP8 rules.
+                    # A PR is open to resolve this issue:
+                    # https://github.com/PyCQA/pycodestyle/pull/914
+                    seq_letters = [
+                        frame[i : i + sw]  # noqa: E203
+                        for i in range(0, len(frame), sw)
+                    ]
+                    nl = "\n"
+                    protfile.write(
+                        f">{sequence.name}_frame={idx + 1}\n"
+                        + f"{nl.join(map(str, seq_letters))}\n"
+                    )
