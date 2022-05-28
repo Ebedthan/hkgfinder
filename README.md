@@ -1,4 +1,4 @@
-# butler <img src="img/logo.png" align="right" width="120"/>
+# hkgfinder <img src="img/logo.png" align="right" width="120"/>
 
 [![License: GPL v3](https://img.shields.io/badge/License-MIT-blue.svg)](https://www.gnu.org/licenses/MIT)
 
@@ -12,17 +12,17 @@
 
 ### Installation
 
-You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run butler.
+You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run hkgfinder.
 
 
 #### Install from source
 
 ```bash
-# Download butler development version
-git clone https://github.com/Ebedthan/butler.git butler
+# Download hkgfinder development version
+git clone https://github.com/Ebedthan/hkgfinder.git hkgfinder
 
 # Navigate to directory
-cd butler
+cd hkgfinder
 
 # Install with poetry: see https://python-poetry.org
 poetry install --no-dev
@@ -30,22 +30,22 @@ poetry install --no-dev
 # Enter the Python virtual environment with
 poetry shell
 
-# Test butler is correctly installed
-butler -h
+# Test hkgfinder is correctly installed
+hkgfinder -h
 ```
 
 If you do not want to go into the virtual environment just do:
 
 ```bash
-poetry run butler -h
+poetry run hkgfinder -h
 ```
 
 ## Test
 
-* Type `butler -h` and it should output something like:
+* Type `hkgfinder -h` and it should output something like:
 
 ```
-usage: butler [options] [<FILE>]
+usage: hkgfinder [options] [<FILE>]
 
 optional arguments:
   -o [FILE]      output result to FILE [stdout]
@@ -59,16 +59,16 @@ optional arguments:
 ```
 
 
-## Invoking butler
+## Invoking hkgfinder
 
 ```
-butler --faa housekeeping.faa --fna housekeeping.fna file.fa.gz
+hkgfinder --faa housekeeping.faa --fna housekeeping.fna file.fa.gz
 ```
 
   
 ## Bugs
 
-Submit problems or requests to the [Issue Tracker](https://github.com/Ebedthan/butler/issues).
+Submit problems or requests to the [Issue Tracker](https://github.com/Ebedthan/hkgfinder/issues).
 
 
 ## Dependencies
@@ -86,7 +86,7 @@ Submit problems or requests to the [Issue Tracker](https://github.com/Ebedthan/b
 
 ## Licence
 
-[MIT](https://github.com/Ebedthan/butler/blob/main/LICENSE).
+[MIT](https://github.com/Ebedthan/hkgfinder/blob/main/LICENSE).
 
 
 ## Author
