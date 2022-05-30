@@ -185,7 +185,7 @@ def main():
 
     fatype = utils.is_dna_or_aa(fa[0].seq)
 
-    if args.g and fa.len() > 1:
+    if args.g and len(fa) > 1:
         utils.err("Cannot run genome mode on more than one genome per file")
         sys.exit(1)
 
