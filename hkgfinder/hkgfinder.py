@@ -421,6 +421,7 @@ def main():
         )
     # Get matched proteins
     if args.faa or args.fna:
+        genes = {}
         prots = ""
         nl = "\n"
         if args.p:
@@ -433,28 +434,30 @@ def main():
             else:
                 prots = fa
 
+        if args.s:
+            for k, v in classif.items():
+                mygene = v.split("#")[0]
+                if mygene in genes:
+                    genes[mygene].append(k)
+                else:
+                    genes[v.split("#")[0]] = [k]
+
         if args.faa:
             utils.msg("Writing out predicted proteins sequences", is_quiet)
 
-            oprots = open(args.faa, "w")
-
             if args.s:
-                genes = {}
-                for k, v in classif.items():
-                    mygene = v.split("#")[0]
-                    if mygene in genes:
-                        genes[mygene].append(k)
-                    else:
-                        genes[v.split("#")[0]] = [k]
-
-                for gene, id in genes.items():
-                    seq = [
-                        prots[id].seq[i : i + 60]  # noqa: E203
-                        for i in range(0, len(prots[id]), 60)
-                    ]
-                    oprots.write(
-                        f">{id}_gene={gene}\n{nl.join(map(str, seq))}\n"
+                for gene in genes.keys():
+                    oprots = open(
+                        f"{os.path.splitext(args.faa)}_{gene}.faa", "w"
                     )
+                    for s in genes[gene]:
+                        seq = [
+                            prots[s].seq[i : i + 60]  # noqa: E203
+                            for i in range(0, len(prots[s]), 60)
+                        ]
+                        oprots.write(
+                            f">{s}_gene={gene}\n{nl.join(map(str, seq))}\n"
+                        )
             else:
                 for k, v in classif.items():
                     seq = [
@@ -477,6 +480,35 @@ def main():
                 )
             else:
                 mg = pyfastx.Fasta(args.file.name)
+
+            for gene in genes.keys():
+                ofna = open(f"{os.path.splitext(args.faa)}_{gene}.faa", "w")
+                for s in genes[gene]:
+                    data = prots[s].description.split("#")[:4]
+                    seq = []
+                    newk = "_".join(s.split("_")[:-1])
+                    ss = int(data[3].strip())
+                    if ss == 1:
+                        subseq = mg.fetch(
+                            newk, (int(data[1].strip()), int(data[2].strip()))
+                        )
+                        seq = [
+                            subseq[i : i + 60]  # noqa: E203
+                            for i in range(0, len(subseq), 60)
+                        ]
+                    elif ss == -1:
+                        subseq = mg.fetch(
+                            newk,
+                            (int(data[1].strip()), int(data[2].strip())),
+                            strand="-",
+                        )
+                        seq = [
+                            subseq[i : i + 60]  # noqa: E203
+                            for i in range(0, len(subseq), 60)
+                        ]
+
+                    ofna.write(f">{s}_gene={gene}\n{nl.join(map(str, seq))}\n")
+
             for k, v in classif.items():
                 data = prots[k].description.split("#")[:4]
                 seq = []
