@@ -1,18 +1,31 @@
-# hkgfinder <img src="img/logo.png" align="right" width="120"/>
+# hkgfinder
 
-[![License: GPL v3](https://img.shields.io/badge/License-MIT-blue.svg)](https://www.gnu.org/licenses/MIT)
+[![PyPI](https://img.shields.io/pypi/v/hkgfinder.svg)](https://pypi.org/project/hkgfinder)
+[![Wheel](https://img.shields.io/pypi/wheel/hkgfinder.svg)](https://pypi.org/project/hkgfinder)
+[![Language](https://img.shields.io/pypi/implementation/hkgfinder)](https://pypi.org/project/hkgfinder)
+[![Pyver](https://img.shields.io/pypi/pyversions/hkgfinder.svg)](https://pypi.org/project/hkgfinder)
+[![Downloads](https://img.shields.io/pypi/dm/hkgfinder)](https://pypi.org/project/hkgfinder)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://www.gnu.org/licenses/MIT)
 
 
 ## Find housekeeping genes in prokaryotic (meta)genomes
 
-
 ### Introduction
+hkgfinder is a fast and accurate housekeeping gene finder and classifier. Hkgfinder can run on raw sequences, genomes and metagenomes. The novel value of this method lies is in its ability to directly predict and classify gene sequences into housekeeping gene families at a high specificity and sensitivity, while being also faster than genome and metagenome annotator on genome and metagenome data.
 
-
+### How hkgfinder works
+![](img/hkgfinder.png)
 
 ### Installation
 
 You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run hkgfinder.
+
+
+#### Install from Pip
+
+```bash
+pip install hkgfinder
+```
 
 
 #### Install from source

@@ -63,13 +63,18 @@ parser.add_argument(
     "--faa",
     type=str,
     metavar="FILE",
-    help="output matched proteins sequences to FILE",
+    help="output matched protein sequences to FILE [false]",
 )
 parser.add_argument(
     "--fna",
     type=str,
     metavar="FILE",
-    help="output matched DNA sequences to FILE",
+    help="output matched DNA sequences to FILE [false]",
+)
+parser.add_argument(
+    "-s",
+    action="store_true",
+    help="output sequences in file by gene [false]",
 )
 parser.add_argument(
     "-t",
@@ -150,6 +155,10 @@ def main():
         user = "not telling me who you are"
 
     # Handling CLI arguments ---------------------------------------------
+    if args.s:
+        if not args.faa or not args.fna:
+            utils.warn("Unecessary -s option in absence of --faa or --fna")
+
     # Handling input file supply
     from_stdin = False
     if args.file.name == "<stdin>":
@@ -175,6 +184,10 @@ def main():
         fa = pyfastx.Fasta(args.file.name)
 
     fatype = utils.is_dna_or_aa(fa[0].seq)
+
+    if args.g and fa.len() > 1:
+        utils.err("Cannot run genome mode on more than one genome per file")
+        sys.exit(1)
 
     if args.g and fatype == "protein":
         utils.err("Cannot run genome mode on proteins")
@@ -424,14 +437,34 @@ def main():
             utils.msg("Writing out predicted proteins sequences", is_quiet)
 
             oprots = open(args.faa, "w")
-            for k, v in classif.items():
-                seq = [
-                    prots[k].seq[i : i + 60]  # noqa: E203
-                    for i in range(0, len(prots[k]), 60)
-                ]
-                oprots.write(
-                    f">{k}_gene={v.split('#')[0]}\n{nl.join(map(str, seq))}\n"
-                )
+
+            if args.s:
+                genes = {}
+                for k, v in classif.items():
+                    mygene = v.split("#")[0]
+                    if mygene in genes:
+                        genes[mygene].append(k)
+                    else:
+                        genes[v.split("#")[0]] = [k]
+
+                for gene, id in genes.items():
+                    seq = [
+                        prots[id].seq[i : i + 60]  # noqa: E203
+                        for i in range(0, len(prots[id]), 60)
+                    ]
+                    oprots.write(
+                        f">{id}_gene={gene}\n{nl.join(map(str, seq))}\n"
+                    )
+            else:
+                for k, v in classif.items():
+                    seq = [
+                        prots[k].seq[i : i + 60]  # noqa: E203
+                        for i in range(0, len(prots[k]), 60)
+                    ]
+                    oprots.write(
+                        f">{k}_gene={v.split('#')[0]}\n"
+                        + f"{nl.join(map(str, seq))}\n"
+                    )
 
         if args.fna:
             utils.msg("Writing out predicted DNA sequences", is_quiet)
