@@ -62,7 +62,7 @@ def print_install_tool(tool):
         err("hmmsearch not found. Please visit https://hmmer3.org.")
     elif tool == "prodigal":
         err(
-            "prodigal not found. Please visit"
+            "prodigal not found. Please visit "
             + "https://github.com/hyattpd/Prodigal"
         )
 

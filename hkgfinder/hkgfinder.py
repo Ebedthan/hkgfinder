@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2022 Anicet Ebou.
+# Copyright 2022-2023 Anicet Ebou.
 # Licensed under the MIT license (http://opensource.org/licenses/MIT)
 # This file may not be copied, modified, or distributed except according
 # to those terms.
@@ -10,7 +10,6 @@ from Bio import SearchIO
 from collections import defaultdict
 from datetime import datetime
 from distutils.spawn import find_executable
-import fileinput
 import os
 from pathlib import Path
 import platform
@@ -20,6 +19,8 @@ from subprocess import run
 import sys
 from tempfile import TemporaryDirectory
 from . import utils
+import xphyle
+import xphyle.paths
 
 
 AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
@@ -156,25 +157,22 @@ def main():
 
     # Handling CLI arguments ---------------------------------------------
     if args.s:
-        if not args.faa or not args.fna:
-            utils.warn("Unecessary -s option in absence of --faa or --fna")
+        if not args.faa and not args.fna:
+            utils.warn(
+                "Unecessary -s option in absence of --faa or --fna", is_quiet
+            )
 
     # Handling input file supply
-    from_stdin = False
     if args.file.name == "<stdin>":
-        from_stdin = True
         binput = open(Path(hkgfinder_temp.name, "hkgfinder_input.fa"), "w")
-        for line in fileinput.input(files="-"):
-            binput.write(line)
-        binput.close()
+        with xphyle.xopen(xphyle.paths.STDIN, context_wrapper=True) as infile:
+            for line in infile:
+                binput.write(line)
     else:
-        infile_type = utils.get_file_type(args.file.name)
-        if infile_type not in ["gz", "unknown"]:
-            utils.err(
-                f"Input file compression ({infile_type})"
-                + " is not currently supported"
-            )
-            sys.exit(1)
+        binput = open(Path(hkgfinder_temp.name, "hkgfinder_input.fa"), "w")
+        with xphyle.xopen(str(args.file.name), context_wrapper=True) as infile:
+            for line in infile:
+                binput.write(line)
 
     # Check Alphabet of supplied sequences
     fa = ""
@@ -246,75 +244,44 @@ def main():
     # In genome mode ----------------------------------------------------------
     if args.g:
         utils.msg("Predicting protein-coding genes", is_quiet)
-        if from_stdin:
-            run(
-                [
-                    "prodigal",
-                    "-q",
-                    "-o",
-                    Path(hkgfinder_temp.name, "mygenes"),
-                    "-i",
-                    Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                    "-a",
-                    Path(hkgfinder_temp.name, "my.proteins.faa"),
-                ]
-            )
-        else:
-            run(
-                [
-                    "prodigal",
-                    "-q",
-                    "-o",
-                    Path(hkgfinder_temp.name, "mygenes"),
-                    "-i",
-                    str(args.file.name),
-                    "-a",
-                    Path(hkgfinder_temp.name, "my.proteins.faa"),
-                ]
-            )
+        run(
+            [
+                "prodigal",
+                "-q",
+                "-o",
+                Path(hkgfinder_temp.name, "mygenes"),
+                "-i",
+                Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
+                "-a",
+                Path(hkgfinder_temp.name, "my.proteins.faa"),
+            ]
+        )
 
     # In metagenome mode ------------------------------------------------------
     elif args.m:
         utils.msg("Predicting protein-coding genes", is_quiet)
-        if from_stdin:
-            run(
-                [
-                    "prodigal",
-                    "-q",
-                    "-p",
-                    "anon",
-                    "-o",
-                    Path(hkgfinder_temp.name, "mygenes"),
-                    "-i",
-                    Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                    "-a",
-                    Path(hkgfinder_temp.name, "my.proteins.faa"),
-                ]
-            )
-        else:
-            run(
-                [
-                    "prodigal",
-                    "-q",
-                    "-p",
-                    "anon",
-                    "-o",
-                    Path(hkgfinder_temp.name, "mygenes"),
-                    "-i",
-                    str(args.file.name),
-                    "-a",
-                    Path(hkgfinder_temp.name, "my.proteins.faa"),
-                ]
-            )
+        run(
+            [
+                "prodigal",
+                "-q",
+                "-p",
+                "anon",
+                "-o",
+                Path(hkgfinder_temp.name, "mygenes"),
+                "-i",
+                Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
+                "-a",
+                Path(hkgfinder_temp.name, "my.proteins.faa"),
+            ]
+        )
 
     # In normal mode ----------------------------------------------------------
     else:
         if fatype == "DNA":
             utils.msg("Translating sequences into 6 frames", is_quiet)
-            if from_stdin:
-                fa = pyfastx.Fasta(
-                    str(Path(hkgfinder_temp.name, "hkgfinder_input.fa"))
-                )
+            fa = pyfastx.Fasta(
+                str(Path(hkgfinder_temp.name, "hkgfinder_input.fa"))
+            )
 
             # translate sequences
             utils.do_translation(
@@ -339,34 +306,19 @@ def main():
         )
     else:
         if fatype == "protein":
-            if from_stdin:
-                run(
-                    [
-                        "hmmsearch",
-                        "--cut_ga",
-                        "--cpu",
-                        str(cpus),
-                        "--noali",
-                        "-o",
-                        Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
-                        Path(dbdir, "hkgfinder.hmm"),
-                        Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                    ]
-                )
-            else:
-                run(
-                    [
-                        "hmmsearch",
-                        "--cut_ga",
-                        "--cpu",
-                        str(cpus),
-                        "--noali",
-                        "-o",
-                        Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
-                        Path(dbdir, "hkgfinder.hmm"),
-                        str(args.file.name),
-                    ]
-                )
+            run(
+                [
+                    "hmmsearch",
+                    "--cut_ga",
+                    "--cpu",
+                    str(cpus),
+                    "--noali",
+                    "-o",
+                    Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
+                    Path(dbdir, "hkgfinder.hmm"),
+                    Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
+                ]
+            )
         else:
             run(
                 [
@@ -469,13 +421,9 @@ def main():
             utils.msg("Writing out predicted DNA sequences", is_quiet)
 
             ofna = open(args.fna, "w")
-            mg = ""
-            if from_stdin:
-                mg = pyfastx.Fasta(
-                    str(Path(hkgfinder_temp.name, "hkgfinder_input.fa"))
-                )
-            else:
-                mg = pyfastx.Fasta(args.file.name)
+            mg = pyfastx.Fasta(
+                str(Path(hkgfinder_temp.name, "hkgfinder_input.fa"))
+            )
 
             for gene in genes.keys():
                 ofna = open(f"{os.path.splitext(args.faa)}_{gene}.faa", "w")
@@ -532,11 +480,10 @@ def main():
                     f">{k}_gene={v.split('#')[0]}\n{nl.join(map(str, seq))}\n"
                 )
     # Cleaning around ---------------------------------------------------------
-    if not from_stdin:
-        try:
-            os.remove(f"{args.file.name}.fxi")
-        except OSError:
-            pass
+    try:
+        os.remove(f"{args.file.name}.fxi")
+    except OSError:
+        pass
     utils.msg("Task finished successfully", is_quiet)
     utils.msg(
         f"Walltime used (hh:mm:ss.ms): {utils.elapsed_since(startime)}",

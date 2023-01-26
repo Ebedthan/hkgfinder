@@ -29,6 +29,7 @@ include = ["db/*"]
 python = "^3.8"
 bio = "^1.3.9"
 pyfastx = "^0.8.4"
+xphyle = "^4.4.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
