@@ -1,4 +1,4 @@
-# Copyright 2022 Anicet Ebou.
+# Copyright 2022-2023 Anicet Ebou.
 # Licensed under the MIT license (http://opensource.org/licenses/MIT)
 # This file may not be copied, modified, or distributed except according
 # to those terms.

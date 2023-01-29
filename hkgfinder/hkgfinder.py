@@ -339,15 +339,17 @@ def main():
     # Second iteration over output file to get evalues and hsps
     utils.msg("Parsing HMM result", is_quiet)
 
-    with open(Path(hkgfinder_temp.name, "hkgfinder.hmmsearch")) as hmmfile:
-        for record in SearchIO.parse(hmmfile, "hmmer3-text"):
-            hits = record.hits
-            for hit in hits:
-                for _ in hit.hsps:
-                    hmmdict[f"{hit.id}#{hit.description}"][
-                        f"{record.id}#{record.description}"
-                    ].extend([hit.evalue, hit.bitscore])
-    hmmfile.close()
+    hmmresult = SearchIO.parse(
+        Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"), "hmmer3-text"
+    )
+    for record in hmmresult:
+        hits = record.hits
+        for hit in hits:
+            for _ in hit.hsps:
+                hmmdict[f"{hit.id}#{hit.description}"][
+                    f"{record.id}#{record.description}"
+                ].extend([hit.evalue, hit.bitscore])
+
     classif = utils.get_best_match(hmmdict)
 
     # Write output ------------------------------------------------------------

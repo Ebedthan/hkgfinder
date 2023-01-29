@@ -79,6 +79,7 @@ optional arguments:
 hkgfinder --faa housekeeping.faa --fna housekeeping.fna file.fa.gz
 ```
 
+* hkgfinder supports gzip, lzma, bz2 and zstd compressed files.
   
 ## Bugs
 
