@@ -202,6 +202,20 @@ def main():
         )
         sys.exit(1)
 
+    # Check if fasta file does not contain duplicate sequences
+    # which would break hmmsearch
+    ids = fa.keys()
+    if len(ids) != len(set(ids)):
+        utils.err(
+            "Supplied FASTA file contains duplicate sequences. "
+            + "Please remove them before launching hkgfinder."
+        )
+        try:
+            os.remove(f"{args.file.name}.fxi")
+        except OSError:
+            pass
+        sys.exit(1)
+
     # Start program ---------------------------------------------------------
     utils.msg(f"This is hkgfinder {VERSION}", is_quiet)
     utils.msg(f"Written by {AUTHOR}", is_quiet)
@@ -289,7 +303,7 @@ def main():
             )
 
     # Classifying sequences into housekkeping genes
-    utils.msg("classifying sequences into housekeeping genes", is_quiet)
+    utils.msg("Classifying sequences into housekeeping genes", is_quiet)
     if args.g or args.m:
         run(
             [
