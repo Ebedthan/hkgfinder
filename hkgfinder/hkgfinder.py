@@ -167,12 +167,12 @@ def main():
         binput = open(Path(hkgfinder_temp.name, "hkgfinder_input.fa"), "w")
         with xphyle.xopen(xphyle.paths.STDIN, context_wrapper=True) as infile:
             for line in infile:
-                binput.write(line)
+                binput.write(line)  # type: ignore
     else:
         binput = open(Path(hkgfinder_temp.name, "hkgfinder_input.fa"), "w")
         with xphyle.xopen(str(args.file.name), context_wrapper=True) as infile:
             for line in infile:
-                binput.write(line)
+                binput.write(line)  # type: ignore
 
     # Check Alphabet of supplied sequences
     fa = ""
@@ -423,6 +423,7 @@ def main():
                             f">{s}_gene={gene}\n{nl.join(map(str, seq))}\n"
                         )
             else:
+                oprots = open(f"{os.path.splitext(args.faa)}.faa", "w")
                 for k, v in classif.items():
                     seq = [
                         prots[k].seq[i : i + 60]  # noqa: E203
