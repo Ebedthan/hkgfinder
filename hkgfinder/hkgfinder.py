@@ -6,22 +6,25 @@
 # to those terms.
 
 import argparse
-from Bio import SearchIO
+import os
+import platform
+import sys
 from collections import defaultdict
 from datetime import datetime
 from distutils.spawn import find_executable
-import os
 from pathlib import Path
-import platform
-import pyfastx
 from random import randrange
 from subprocess import run
-import sys
 from tempfile import TemporaryDirectory
-from . import utils
+import pyrodigal
+import pyhmmer
+
+import pyfastx
 import xphyle
 import xphyle.paths
+from Bio import SearchIO, SeqIO
 
+from . import utils
 
 AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
 URL = "https://github.com/Ebedthan/hkgfinder"
@@ -258,36 +261,33 @@ def main():
     # In genome mode ----------------------------------------------------------
     if args.g:
         utils.msg("Predicting protein-coding genes", is_quiet)
-        run(
-            [
-                "prodigal",
-                "-q",
-                "-o",
-                Path(hkgfinder_temp.name, "mygenes"),
-                "-i",
-                Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                "-a",
-                Path(hkgfinder_temp.name, "my.proteins.faa"),
-            ]
+        records = SeqIO.index(
+            str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")), "fasta"
         )
+        orf_finder = pyrodigal.OrfFinder()
+        orf_finder.train(*(bytes(record.seq) for record in records.values()))
+        with open(Path("my.proteins.faa"), "w+") as prot_file:
+            for seq in records.values():
+                for i, prediction in enumerate(
+                    orf_finder.find_genes(bytes(seq.seq))
+                ):
+                    prot = prediction.translate()
+                    prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
 
     # In metagenome mode ------------------------------------------------------
     elif args.m:
         utils.msg("Predicting protein-coding genes", is_quiet)
-        run(
-            [
-                "prodigal",
-                "-q",
-                "-p",
-                "anon",
-                "-o",
-                Path(hkgfinder_temp.name, "mygenes"),
-                "-i",
-                Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-                "-a",
-                Path(hkgfinder_temp.name, "my.proteins.faa"),
-            ]
+        records = SeqIO.index(
+            str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")), "fasta"
         )
+        orf_finder = pyrodigal.OrfFinder(meta=True)
+        with open(Path("my.proteins.faa"), "w+") as prot_file:
+            for seq in records.values():
+                for i, prediction in enumerate(
+                    orf_finder.find_genes(bytes(seq.seq))
+                ):
+                    prot = prediction.translate()
+                    prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
 
     # In normal mode ----------------------------------------------------------
     else:
@@ -302,9 +302,13 @@ def main():
                 fa, Path(hkgfinder_temp.name, "input_translate.fa")
             )
 
-    # Classifying sequences into housekkeping genes
+    # Classifying sequences into housekeeping genes
     utils.msg("Classifying sequences into housekeeping genes", is_quiet)
     if args.g or args.m:
+        with pyhmmer.easel.SequenceFile(
+            str(Path(hkgfinder_temp.name, "my.proteins.faa")), digital=True
+        ) as seq_file:
+            proteins = seq_file.read_block()
         run(
             [
                 "hmmsearch",
@@ -315,7 +319,7 @@ def main():
                 "-o",
                 Path(hkgfinder_temp.name, "hkgfinder.hmmsearch"),
                 Path(dbdir, "hkgfinder.hmm"),
-                Path(hkgfinder_temp.name, "my.proteins.faa"),
+                Path("my.proteins.faa"),
             ]
         )
     else:
@@ -363,6 +367,7 @@ def main():
                 hmmdict[f"{hit.id}#{hit.description}"][
                     f"{record.id}#{record.description}"
                 ].extend([hit.evalue, hit.bitscore])
+    print(hmmdict)
 
     classif = utils.get_best_match(hmmdict)
 
