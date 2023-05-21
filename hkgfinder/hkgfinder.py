@@ -26,8 +26,6 @@ from Bio import SeqIO
 
 from . import utils
 
-# TODO: Check length of sequence to stop if not in genome mode. length not > 10000
-
 AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
 URL = "https://github.com/Ebedthan/hkgfinder"
 VERSION = "0.1"
