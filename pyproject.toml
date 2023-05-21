@@ -24,7 +24,9 @@ classifiers = [
             "Operating System :: Unix",
             "Topic :: Scientific/Engineering :: Bio-Informatics"
 ]
-include = ["db/*"]
+
+[options.package_data]
+hkgfinder = "*.hmm"
 
 [tool.poetry.dependencies]
 python = "^3.8"

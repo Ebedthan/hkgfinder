@@ -1,12 +1,18 @@
+"""Module providing utils for hkgfinder."""
+
 # Copyright 2022-2023 Anicet Ebou.
 # Licensed under the MIT license (http://opensource.org/licenses/MIT)
 # This file may not be copied, modified, or distributed except according
 # to those terms.
 
-from datetime import datetime
-import sys
-from Bio.Seq import reverse_complement, translate
 import warnings
+from datetime import datetime
+from sys import stderr
+import os
+import pyfastx
+from pathlib import Path
+
+from Bio.Seq import reverse_complement, translate
 
 
 def get_file_type(filename):
@@ -25,7 +31,6 @@ def get_file_type(filename):
     # The longer byte to read in at file start
     # is max(len(x) for x in magic_dict) which gives 7 as result
     with open(filename, "rb") as f:
-
         # Read at most 7 bytes at file start
         file_start = f.read(7)
 
@@ -73,7 +78,7 @@ def elapsed_since(start):
 
 
 def err(text):
-    print(f"Error: {text}", file=sys.stderr)
+    print(f"Error: {text}", file=stderr)
 
 
 def msg(text, is_quiet):
@@ -136,7 +141,7 @@ def _translate_seq(seq):
     return seqlist
 
 
-def do_translation(infile, outfile, sw=60):
+def do_translation(infile: str, outfile: Path, width=60):
     """
     do_translation translate a DNA fasta file into proteins
     fasta file.
@@ -146,22 +151,68 @@ def do_translation(infile, outfile, sw=60):
     :sw: Sequence width. Default: 60.
     """
 
-    with open(outfile, "w") as protfile:
-        for sequence in infile:
+    file = pyfastx.Fasta(infile)
+
+    with open(outfile, "w", encoding="utf-8") as protfile:
+        for sequence in file:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 protseq = _translate_seq(sequence.seq)
                 for idx, frame in enumerate(protseq):
-                    # Rule E203 from flacke8 check for extraneous whitespace
-                    # before a colon. But black follow PEP8 rules.
-                    # A PR is open to resolve this issue:
-                    # https://github.com/PyCQA/pycodestyle/pull/914
                     seq_letters = [
-                        frame[i : i + sw]  # noqa: E203
-                        for i in range(0, len(frame), sw)
+                        frame[i : i + width]
+                        for i in range(0, len(frame), width)
                     ]
-                    nl = "\n"
+                    new_line = "\n"
                     protfile.write(
                         f">{sequence.name}_frame={idx + 1}\n"
-                        + f"{nl.join(map(str, seq_letters))}\n"
+                        + f"{new_line.join(map(str, seq_letters))}\n"
                     )
+
+
+hmmdesc = {
+    "MnmE": "tRNA uridine-5-carboxymethylaminomethyl(34) synthesis GTPase MnmE",
+    "DnaK": "Molecular chaperonne DnaK",
+    "GyrB": "DNA topoisomerase (ATP-hydrolyzing) subunit B",
+    "RecA": "recombinase RecA",
+    "rpoB": "DNA-directed RNA polymerase subunit beta",
+    "infB": "translation initiation factor IF-2",
+    "atpD": "F0F1 ATP synthase subunit beta",
+    "GroEL": "chaperonin GroEL",
+    "fusA": "Elongation factor G",
+    "ileS": "isoleucine--tRNA ligase",
+    "lepA": "translation elongation factor 4",
+    "leuS_bact": "leucine--tRNA ligase bacteria",
+    "leuS_arch": "leucine--tRNA ligase archaea",
+    "PyrG": "CTP synthase (glutamine hydrolyzing)",
+    "recG": "ATP-dependent DNA helicase RecG",
+    "rplB_bact": "50S ribosomal protein L2",
+    "nifH": "nitrogenase iron protein",
+    "nodC": "chitooligosaccharide synthase NodC",
+}
+
+
+def get_hmm_desc(hmm_id):
+    return hmmdesc[hmm_id]
+
+
+def parse_cpu(cpu, is_quiet):
+    cpus = 0
+    available_cpus = os.cpu_count()
+    if cpu == 0:
+        cpus = available_cpus
+    elif cpu > available_cpus:
+        warn(
+            f"Option -t asked for {cpu} threads,"
+            + f" but system has only {available_cpus}.",
+            is_quiet,
+        )
+        cpus = available_cpus
+
+    return cpus
+
+
+def write_seq(file, seq_id, seq):
+    seq = [seq[i : i + 60] for i in range(0, len(seq), 60)]
+    newline = "\n"
+    file.write(f">{seq_id}" + f"\n{newline.join(map(str, seq))}\n")
