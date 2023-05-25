@@ -101,11 +101,37 @@ parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
 args = parser.parse_args()
 
+if args.q:
+    QUIETNESS_LEVEL = logging.CRITICAL
+else:
+    QUIETNESS_LEVEL = logging.INFO
+
 logging.basicConfig(
     format="[%(asctime)s][%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
-    level=logging.INFO,
+    level=QUIETNESS_LEVEL,
 )
+
+HMMDESC = {
+    "MnmE": "tRNA uridine-5-carboxymethylaminomethyl(34) synthesis GTPase MnmE",
+    "DnaK": "Molecular chaperonne DnaK",
+    "GyrB": "DNA topoisomerase (ATP-hydrolyzing) subunit B",
+    "RecA": "recombinase RecA",
+    "rpoB": "DNA-directed RNA polymerase subunit beta",
+    "infB": "translation initiation factor IF-2",
+    "atpD": "F0F1 ATP synthase subunit beta",
+    "GroEL": "chaperonin GroEL",
+    "fusA": "Elongation factor G",
+    "ileS": "isoleucine--tRNA ligase",
+    "lepA": "translation elongation factor 4",
+    "leuS_bact": "leucine--tRNA ligase bacteria",
+    "leuS_arch": "leucine--tRNA ligase archaea",
+    "PyrG": "CTP synthase (glutamine hydrolyzing)",
+    "recG": "ATP-dependent DNA helicase RecG",
+    "rplB_bact": "50S ribosomal protein L2",
+    "nifH": "nitrogenase iron protein",
+    "nodC": "chitooligosaccharide synthase NodC",
+}
 
 
 def main():
@@ -354,7 +380,7 @@ def main():
                 bit_cutoffs="gathering",  # type: ignore
             ):
                 hmm_id = hits.query_name
-                hmm_desc = utils.get_hmm_desc(str(hmm_id, encoding="utf-8"))  # type: ignore
+                hmm_desc = HMMDESC[str(hmm_id, encoding="utf-8")]  # type: ignore
                 for hit in hits:
                     if hit.included:
                         results.append(
@@ -508,9 +534,7 @@ def main():
     except OSError:
         pass
     logging.info("Task finished successfully")
-    logging.info(
-        "Walltime used (hh:mm:ss.ms): %s", utils.elapsed_since(startime)
-    )
+    logging.info("Walltime used (hh:mm:ss.ms): %s", datetime.now() - startime)
     if randrange(0, 100000) % 2:
         logging.info("Nice to have you. Share, enjoy and come back!")
     else:

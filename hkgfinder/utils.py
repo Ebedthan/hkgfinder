@@ -5,22 +5,15 @@
 # This file may not be copied, modified, or distributed except according
 # to those terms.
 
-import warnings
-from datetime import datetime
-import os
-import pyfastx
-from pathlib import Path
 import typing
+import warnings
+from pathlib import Path
 
+import pyfastx
 from Bio.Seq import reverse_complement, translate
 
 
-def elapsed_since(start):
-    walltime = datetime.now() - start
-    return walltime
-
-
-def _translate_seq(seq):
+def _translate_seq(seq: str) -> typing.List[str]:
     """
     _translate_seq translate DNA sequence to proteins in the six frames.
 
@@ -28,6 +21,9 @@ def _translate_seq(seq):
     """
 
     seqlist = []
+
+    rev_comp = reverse_complement(seq)
+
     # frame 1
     seqlist.append(translate(seq))
     # frame 2
@@ -35,11 +31,11 @@ def _translate_seq(seq):
     # frame 3
     seqlist.append(translate(seq[2:]))
     # frame 4
-    seqlist.append(translate(reverse_complement(seq)))
+    seqlist.append(translate(rev_comp))
     # frame 5
-    seqlist.append(translate(reverse_complement(seq)[1:]))
+    seqlist.append(translate(rev_comp[1:]))
     # frame 6
-    seqlist.append(translate(reverse_complement(seq)[2:]))
+    seqlist.append(translate(rev_comp[2:]))
 
     return seqlist
 
@@ -73,33 +69,11 @@ def do_translation(infile: str, outfile: Path, width=60):
                     )
 
 
-hmmdesc = {
-    "MnmE": "tRNA uridine-5-carboxymethylaminomethyl(34) synthesis GTPase MnmE",
-    "DnaK": "Molecular chaperonne DnaK",
-    "GyrB": "DNA topoisomerase (ATP-hydrolyzing) subunit B",
-    "RecA": "recombinase RecA",
-    "rpoB": "DNA-directed RNA polymerase subunit beta",
-    "infB": "translation initiation factor IF-2",
-    "atpD": "F0F1 ATP synthase subunit beta",
-    "GroEL": "chaperonin GroEL",
-    "fusA": "Elongation factor G",
-    "ileS": "isoleucine--tRNA ligase",
-    "lepA": "translation elongation factor 4",
-    "leuS_bact": "leucine--tRNA ligase bacteria",
-    "leuS_arch": "leucine--tRNA ligase archaea",
-    "PyrG": "CTP synthase (glutamine hydrolyzing)",
-    "recG": "ATP-dependent DNA helicase RecG",
-    "rplB_bact": "50S ribosomal protein L2",
-    "nifH": "nitrogenase iron protein",
-    "nodC": "chitooligosaccharide synthase NodC",
-}
-
-
-def get_hmm_desc(hmm_id):
-    return hmmdesc[hmm_id]
-
-
-def write_seq(file, seq_id, seq):
-    seq = [seq[i : i + 60] for i in range(0, len(seq), 60)]
+def write_seq(file: typing.TextIO, seq_id: str, seq: str):
+    """
+    write_seq provide a convenient interface to write a sequence
+    to an already opened file.
+    """
+    chunks = [seq[i : i + 60] for i in range(0, len(seq), 60)]
     newline = "\n"
-    file.write(f">{seq_id}" + f"\n{newline.join(map(str, seq))}\n")
+    file.write(f">{seq_id}\n{newline.join(map(str, chunks))}\n")
