@@ -6,6 +6,7 @@
 # to those terms.
 
 import argparse
+import logging
 import os
 import platform
 import sys
@@ -100,6 +101,12 @@ parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
 args = parser.parse_args()
 
+logging.basicConfig(
+    format="[%(asctime)s][%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.INFO,
+)
+
 
 def main():
     # Preparing the environment -----------------------------------------------
@@ -108,11 +115,6 @@ def main():
 
     # Create a temporary directory
     hkgfinder_temp = TemporaryDirectory()
-
-    # Is hkgfinder ran in quiet mode?
-    is_quiet = False
-    if args.q:
-        is_quiet = True
 
     # Get current user name
     try:
@@ -123,29 +125,31 @@ def main():
     # Handling CLI arguments ---------------------------------------------
     if args.s:
         if not args.faa and not args.fna:
-            utils.warn(
-                "Unecessary -s option in absence of --faa or --fna", is_quiet
-            )
+            logging.warning("Unecessary -s option in absence of --faa or --fna")
 
     # Handling input file supply
     if args.file.name == "<stdin>":
-        binput = open(
+        with open(
             Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
             "w",
             encoding="utf-8",
-        )
-        with xphyle.xopen(xphyle.paths.STDIN, context_wrapper=True) as infile:
-            for line in infile:
-                binput.write(line)  # type: ignore
+        ) as binput:
+            with xphyle.xopen(
+                xphyle.paths.STDIN, context_wrapper=True
+            ) as infile:
+                for line in infile:
+                    binput.write(line)  # type: ignore
     else:
-        binput = open(
+        with open(
             Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
             "w",
             encoding="utf-8",
-        )
-        with xphyle.xopen(str(args.file.name), context_wrapper=True) as infile:
-            for line in infile:
-                binput.write(line)  # type: ignore
+        ) as binput:
+            with xphyle.xopen(
+                str(args.file.name), context_wrapper=True
+            ) as infile:
+                for line in infile:
+                    binput.write(line)  # type: ignore
 
     # Check Alphabet of supplied sequences
     if args.file.name == "<stdin>":
@@ -153,29 +157,28 @@ def main():
     else:
         fa = pyfastx.Fasta(args.file.name)
 
-    fatype = utils.is_dna_or_aa(fa[0].seq)
+    fatype = fa.type
 
     if args.g and fatype == "protein":
-        utils.err("Cannot run genome mode on proteins")
+        logging.error("Cannot run genome mode on proteins")
         sys.exit(1)
 
     if args.m and fatype == "protein":
-        utils.err("Cannot run metagenome mode on proteins")
+        logging.error("Cannot run metagenome mode on proteins")
         sys.exit(1)
 
     if fatype not in ["DNA", "protein"]:
-        utils.err("Supplied file should be a DNA or protein file")
+        logging.error("Supplied file should be a DNA or protein file")
         sys.exit(1)
 
     if fatype == "protein" and args.fna:
-        utils.err(
-            "Cannot retrieve matching DNA sequences from protein file. "
-            + "Please remove --fna option"
+        logging.error(
+            "Cannot retrieve matching DNA sequences from protein file. Remove --fna"
         )
         sys.exit(1)
 
     if len(fa.longest) >= 10000 and not args.g:
-        utils.err(
+        logging.error(
             "Sequence length greater than 10000 bp. Do you want genome mode?"
         )
         sys.exit(1)
@@ -184,10 +187,7 @@ def main():
     # which would break hmmsearch
     ids = fa.keys()
     if len(ids) != len(set(ids)):
-        utils.err(
-            "Supplied FASTA file contains duplicate sequences. "
-            + "Please remove them before launching hkgfinder."
-        )
+        logging.error("Supplied FASTA file contains duplicate sequences.")
         try:
             os.remove(f"{args.file.name}.fxi")
         except OSError:
@@ -195,30 +195,40 @@ def main():
         sys.exit(1)
 
     # Start program ---------------------------------------------------------
-    utils.msg(f"This is hkgfinder {VERSION}", is_quiet)
-    utils.msg(f"Written by {AUTHOR}", is_quiet)
-    utils.msg(f"Available at {URL}", is_quiet)
-    utils.msg(f"Localtime is {datetime.now().strftime('%H:%M:%S')}", is_quiet)
-    utils.msg(f"You are {user}", is_quiet)
-    utils.msg(f"Operating system is {platform.system()}", is_quiet)
+    logging.info("This is hkgfinder %s", VERSION)
+    logging.info("Written by %s", AUTHOR)
+    logging.info("Available at %s", URL)
+    logging.info("Localtime is %s", datetime.now().strftime("%H:%M:%S"))
+    logging.info("You are %s", user)
+    logging.info("Operating system is %s", platform.system())
     if args.g:
-        utils.msg("You are running hkgfinder in genome mode", is_quiet)
+        logging.info("You are running hkgfinder in genome mode")
     elif args.m:
-        utils.msg("You are running hkgfinder in metagenome mode", is_quiet)
+        logging.info("You are running hkgfinder in metagenome mode")
     else:
-        utils.msg("You are running kgfinder in normal mode", is_quiet)
+        logging.info("You are running kgfinder in normal mode")
 
     # Handling number of threads -----------------------------------------------
     available_cpus = os.cpu_count()
-    utils.msg(f"System has {available_cpus} cores", is_quiet)
-    cpus = utils.parse_cpu(args.t, is_quiet)
+    logging.info("System has %s cores", available_cpus)
+    cpus = 1
+    available_cpus = os.cpu_count()
+    if args.t == 0:
+        cpus = available_cpus
+    elif args.t > available_cpus:
+        logging.warning(
+            "Option -t asked for %s threads but system has only %s",
+            args.t,
+            available_cpus,
+        )
+        cpus = available_cpus
 
-    utils.msg(f"We will use maximum of {cpus} cores", is_quiet)
+    logging.info("We will use maximum of %s cores", cpus)
 
     # Running tools -----------------------------------------------------------
     # In genome mode ----------------------------------------------------------
     if args.g:
-        utils.msg("Predicting protein-coding genes", is_quiet)
+        logging.info("Predicting protein-coding genes")
         records = SeqIO.index(
             str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")), "fasta"
         )
@@ -247,7 +257,7 @@ def main():
 
     # In metagenome mode ------------------------------------------------------
     elif args.m:
-        utils.msg("Predicting protein-coding genes", is_quiet)
+        logging.info("Predicting protein-coding genes")
         records = SeqIO.index(
             str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")), "fasta"
         )
@@ -276,7 +286,7 @@ def main():
     # In normal mode ----------------------------------------------------------
     else:
         if fatype == "DNA":
-            utils.msg("Translating sequences into 6 frames", is_quiet)
+            logging.info("Translating sequences into 6 frames")
 
             # translate sequences
             utils.do_translation(
@@ -287,13 +297,13 @@ def main():
                 str(Path(hkgfinder_temp.name, "input_translate.fa"))
             )
             if len(fa.longest) >= 10000 and not args.g:
-                utils.err(
+                logging.error(
                     "Sequence length greater than 10000 bp. Do you want genome mode?"
                 )
                 sys.exit(1)
 
     # Classifying sequences into housekeeping genes
-    utils.msg("Classifying sequences into housekeeping genes", is_quiet)
+    logging.info("Classifying sequences into housekeeping genes")
     if args.g or args.m:
         seqdata = Path(hkgfinder_temp.name, "my.proteins.faa")
     else:
@@ -314,15 +324,14 @@ def main():
     ) as hmm_file:
         with pyhmmer.easel.SequenceFile(seqdata, digital=True) as seq_file:
             if target_size < available_memory * 0.1:
-                utils.msg("Pre-fetching targets into memory", is_quiet)
+                logging.info("Pre-fetching targets into memory")
                 targets = seq_file.read_block()
                 mem = sys.getsizeof(targets) + sum(
                     sys.getsizeof(target) for target in targets
                 )
                 mem = mem / 1024
-                utils.msg(
-                    "Database in-memory size: " + f"{mem:.1f} KiB",
-                    is_quiet,
+                logging.info(
+                    "Database in-memory size: {:.1f} KiB".format(mem),
                 )
             else:
                 targets = seq_file
@@ -359,7 +368,7 @@ def main():
                         )
 
                 # Second iteration over output file to get evalues and hsps
-                # utils.msg("Parsing HMM result", is_quiet)
+                # logging.info("Parsing HMM result", is_quiet)
                 for result in results:
                     if result.hit_id in best_results:
                         previous_bitscore = best_results[result.hit_id].bitscore
@@ -371,7 +380,7 @@ def main():
     # Write output ------------------------------------------------------------
     filtered_results = [best_results[k] for k in sorted(best_results)]
 
-    utils.msg("Writing output", is_quiet)
+    logging.info("Writing output")
     if args.o.name != "<stdout>":
         with open(args.o.name, "w", encoding="utf-8") as ofile:
             print(
@@ -421,7 +430,7 @@ def main():
             sorted(filtered_results, key=attrgetter("hit_id"))
 
         if args.faa:
-            utils.msg("Writing out predicted proteins sequences", is_quiet)
+            logging.info("Writing out predicted proteins sequences")
 
             if args.s:
                 for result in filtered_results:
@@ -454,7 +463,7 @@ def main():
                             + f"{newline.join(map(str, seq))}\n"
                         )
         if args.fna:
-            utils.msg("Writing out predicted DNA sequences", is_quiet)
+            logging.info("Writing out predicted DNA sequences")
             if args.g or args.m:
                 dna_file = pyfastx.Fasta(
                     str(Path(hkgfinder_temp.name, "my.dna.fna"))
@@ -498,15 +507,14 @@ def main():
         os.remove(f"{args.file.name}.fxi")
     except OSError:
         pass
-    utils.msg("Task finished successfully", is_quiet)
-    utils.msg(
-        f"Walltime used (hh:mm:ss.ms): {utils.elapsed_since(startime)}",
-        is_quiet,
+    logging.info("Task finished successfully")
+    logging.info(
+        "Walltime used (hh:mm:ss.ms): %s", utils.elapsed_since(startime)
     )
     if randrange(0, 100000) % 2:
-        utils.msg("Nice to have you. Share, enjoy and come back!", is_quiet)
+        logging.info("Nice to have you. Share, enjoy and come back!")
     else:
-        utils.msg("Thanks you, come again.", is_quiet)
+        logging.info("Thanks you, come again.")
 
 
 if __name__ == "__main__":

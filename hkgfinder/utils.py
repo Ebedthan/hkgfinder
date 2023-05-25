@@ -7,114 +7,17 @@
 
 import warnings
 from datetime import datetime
-from sys import stderr
 import os
 import pyfastx
 from pathlib import Path
+import typing
 
 from Bio.Seq import reverse_complement, translate
-
-
-def get_file_type(filename):
-    """
-    get_file_type get file compression type matching the magic bytes
-
-    :filename: File name of the file to check
-    """
-
-    magic_dict = {
-        b"\x1f\x8b": "gz",
-        b"\x42\x5a": "bz2",
-        b"\xfd\x37\x7a\x58\x5a": "lzma",
-    }
-
-    # The longer byte to read in at file start
-    # is max(len(x) for x in magic_dict) which gives 7 as result
-    with open(filename, "rb") as f:
-        # Read at most 7 bytes at file start
-        file_start = f.read(7)
-
-        # Match bytes read with compression type
-        for magic, filetype in magic_dict.items():
-            if file_start.startswith(magic):
-                return filetype
-
-        # If no match, the compression is not known or not compressed
-        return "unknown"
-
-
-def get_best_match(mdict):
-    result = {}
-    for key in mdict.keys():
-        sorted_x = dict(
-            sorted(
-                mdict[key].items(), key=lambda item: item[1][1], reverse=True
-            )
-        )
-        fk, vk = next(iter(sorted_x.items()))
-        result[key] = f"{fk}#{vk[0]}#{vk[1]}"
-
-    return result
-
-
-def print_install_tool(tool):
-    """
-    print_install_tool print useful installation
-    instruction for required tools.
-    """
-
-    if tool == "hmmsearch":
-        err("hmmsearch not found. Please visit https://hmmer3.org.")
-    elif tool == "prodigal":
-        err(
-            "prodigal not found. Please visit "
-            + "https://github.com/hyattpd/Prodigal"
-        )
 
 
 def elapsed_since(start):
     walltime = datetime.now() - start
     return walltime
-
-
-def err(text):
-    print(f"Error: {text}", file=stderr)
-
-
-def msg(text, is_quiet):
-    """
-    msg produces nice message and info output on terminal.
-
-    :text: Message to print to STDOUT.
-    """
-    if not is_quiet:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}][INFO] {text}")
-
-
-def warn(text, is_quiet):
-    if not is_quiet:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}][WARN] {text}")
-
-
-def is_dna_or_aa(s):
-    """
-    is_dna_or_aa test if input sequence is DNA or proteins.
-
-    :s: input sequence
-    """
-
-    dna = "ATCG"
-    prot = "ABCDEFGHIKLMNPQRSTVWYZ*X"
-    stype = ""
-
-    if all(i in dna for i in s):
-        stype = "DNA"
-    elif all(i in prot for i in s):
-        stype = "protein"
-    else:
-        stype = "unknown"
-
-    return stype
 
 
 def _translate_seq(seq):
@@ -194,22 +97,6 @@ hmmdesc = {
 
 def get_hmm_desc(hmm_id):
     return hmmdesc[hmm_id]
-
-
-def parse_cpu(cpu, is_quiet):
-    cpus = 0
-    available_cpus = os.cpu_count()
-    if cpu == 0:
-        cpus = available_cpus
-    elif cpu > available_cpus:
-        warn(
-            f"Option -t asked for {cpu} threads,"
-            + f" but system has only {available_cpus}.",
-            is_quiet,
-        )
-        cpus = available_cpus
-
-    return cpus
 
 
 def write_seq(file, seq_id, seq):
