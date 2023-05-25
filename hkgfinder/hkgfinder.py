@@ -139,279 +139,293 @@ def main():
     # Record the program start time
     startime = datetime.now()
 
-    # Create a temporary directory
-    hkgfinder_temp = TemporaryDirectory()
-
     # Get current user name
     try:
         user = os.environ["USER"]
     except KeyError:
         user = "not telling me who you are"
-
     # Handling CLI arguments ---------------------------------------------
     if args.s:
         if not args.faa and not args.fna:
             logging.warning("Unecessary -s option in absence of --faa or --fna")
 
-    # Handling input file supply
-    if args.file.name == "<stdin>":
-        with open(
-            Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-            "w",
-            encoding="utf-8",
-        ) as binput:
-            with xphyle.xopen(
-                xphyle.paths.STDIN, context_wrapper=True
-            ) as infile:
-                for line in infile:
-                    binput.write(line)  # type: ignore
-    else:
-        with open(
-            Path(hkgfinder_temp.name, "hkgfinder_input.fa"),
-            "w",
-            encoding="utf-8",
-        ) as binput:
-            with xphyle.xopen(
-                str(args.file.name), context_wrapper=True
-            ) as infile:
-                for line in infile:
-                    binput.write(line)  # type: ignore
-
-    # Check Alphabet of supplied sequences
-    if args.file.name == "<stdin>":
-        fa = pyfastx.Fasta(str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")))
-    else:
-        fa = pyfastx.Fasta(args.file.name)
-
-    fatype = fa.type
-
-    if args.g and fatype == "protein":
-        logging.error("Cannot run genome mode on proteins")
-        sys.exit(1)
-
-    if args.m and fatype == "protein":
-        logging.error("Cannot run metagenome mode on proteins")
-        sys.exit(1)
-
-    if fatype not in ["DNA", "protein"]:
-        logging.error("Supplied file should be a DNA or protein file")
-        sys.exit(1)
-
-    if fatype == "protein" and args.fna:
-        logging.error(
-            "Cannot retrieve matching DNA sequences from protein file. Remove --fna"
-        )
-        sys.exit(1)
-
-    if len(fa.longest) >= 10000 and not args.g:
-        logging.error(
-            "Sequence length greater than 10000 bp. Do you want genome mode?"
-        )
-        sys.exit(1)
-
-    # Check if fasta file does not contain duplicate sequences
-    # which would break hmmsearch
-    ids = fa.keys()
-    if len(ids) != len(set(ids)):
-        logging.error("Supplied FASTA file contains duplicate sequences.")
-        try:
-            os.remove(f"{args.file.name}.fxi")
-        except OSError:
-            pass
-        sys.exit(1)
-
-    # Start program ---------------------------------------------------------
-    logging.info("This is hkgfinder %s", VERSION)
-    logging.info("Written by %s", AUTHOR)
-    logging.info("Available at %s", URL)
-    logging.info("Localtime is %s", datetime.now().strftime("%H:%M:%S"))
-    logging.info("You are %s", user)
-    logging.info("Operating system is %s", platform.system())
-    if args.g:
-        logging.info("You are running hkgfinder in genome mode")
-    elif args.m:
-        logging.info("You are running hkgfinder in metagenome mode")
-    else:
-        logging.info("You are running kgfinder in normal mode")
-
-    # Handling number of threads -----------------------------------------------
-    available_cpus = os.cpu_count()
-    logging.info("System has %s cores", available_cpus)
-    cpus = 1
-    available_cpus = os.cpu_count()
-    if args.t == 0:
-        cpus = available_cpus
-    elif args.t > available_cpus:
-        logging.warning(
-            "Option -t asked for %s threads but system has only %s",
-            args.t,
-            available_cpus,
-        )
-        cpus = available_cpus
-
-    logging.info("We will use maximum of %s cores", cpus)
-
-    # Running tools -----------------------------------------------------------
-    # In genome mode ----------------------------------------------------------
-    if args.g:
-        logging.info("Predicting protein-coding genes")
-        records = SeqIO.index(
-            str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")), "fasta"
-        )
-        orf_finder = pyrodigal.OrfFinder()
-        orf_finder.train(*(bytes(record.seq) for record in records.values()))
-        with open(
-            Path(hkgfinder_temp.name, "my.proteins.faa"), "w+", encoding="utf-8"
-        ) as prot_file:
-            for seq in records.values():
-                for i, prediction in enumerate(
-                    orf_finder.find_genes(bytes(seq.seq))
-                ):
-                    prot = prediction.translate()
-                    prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
-
-        if args.fna:
+    # Create a temporary directory
+    with TemporaryDirectory() as tmpdir:
+        # Handling input file supply
+        if args.file.name == "<stdin>":
             with open(
-                Path(hkgfinder_temp.name, "my.dna.fna"), "w+", encoding="utf-8"
-            ) as dna_file:
-                for seq in records.values():
-                    for i, prediction in enumerate(
-                        orf_finder.find_genes(bytes(seq.seq))
-                    ):
-                        dna = prediction
-                        dna_file.write(f">{seq.id}_{i+1}\n{dna}\n")
-
-    # In metagenome mode ------------------------------------------------------
-    elif args.m:
-        logging.info("Predicting protein-coding genes")
-        records = SeqIO.index(
-            str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")), "fasta"
-        )
-        orf_finder = pyrodigal.OrfFinder(meta=True)
-        with open(
-            Path(hkgfinder_temp.name, "my.proteins.faa"), "w+", encoding="utf-8"
-        ) as prot_file:
-            for seq in records.values():
-                for i, prediction in enumerate(
-                    orf_finder.find_genes(bytes(seq.seq))
-                ):
-                    prot = prediction.translate()
-                    prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
-
-        if args.fna:
-            with open(
-                Path(hkgfinder_temp.name, "my.dna.fna"), "w+", encoding="utf-8"
-            ) as dna_file:
-                for seq in records.values():
-                    for i, prediction in enumerate(
-                        orf_finder.find_genes(bytes(seq.seq))
-                    ):
-                        dna = prediction
-                        dna_file.write(f">{seq.id}_{i+1}\n{dna}\n")
-
-    # In normal mode ----------------------------------------------------------
-    else:
-        if fatype == "DNA":
-            logging.info("Translating sequences into 6 frames")
-
-            # translate sequences
-            utils.do_translation(
-                str(Path(hkgfinder_temp.name, "hkgfinder_input.fa")),
-                Path(hkgfinder_temp.name, "input_translate.fa"),
-            )
-            fa = pyfastx.Fasta(
-                str(Path(hkgfinder_temp.name, "input_translate.fa"))
-            )
-            if len(fa.longest) >= 10000 and not args.g:
-                logging.error(
-                    "Sequence length greater than 10000 bp. Do you want genome mode?"
-                )
-                sys.exit(1)
-
-    # Classifying sequences into housekeeping genes
-    logging.info("Classifying sequences into housekeeping genes")
-    if args.g or args.m:
-        seqdata = Path(hkgfinder_temp.name, "my.proteins.faa")
-    else:
-        if fatype == "protein":
-            seqdata = Path(hkgfinder_temp.name, "hkgfinder_input.fa")
+                Path(tmpdir, "hkgfinder_input.fa"),
+                "w",
+                encoding="utf-8",
+            ) as binput:
+                with xphyle.xopen(
+                    xphyle.paths.STDIN, context_wrapper=True
+                ) as infile:
+                    for line in infile:
+                        binput.write(line)  # type: ignore
         else:
-            seqdata = Path(hkgfinder_temp.name, "input_translate.fa")
+            with open(
+                Path(tmpdir, "hkgfinder_input.fa"),
+                "w",
+                encoding="utf-8",
+            ) as binput:
+                with xphyle.xopen(
+                    str(args.file.name), context_wrapper=True
+                ) as infile:
+                    for line in infile:
+                        binput.write(line)  # type: ignore
 
-    results = []
-    best_results = {}
-    available_memory = psutil.virtual_memory().available
-    target_size = os.stat(seqdata).st_size
-    # importlib.resources.open_binary(__name__, "hkgfinder.hmm")
-    bindir = Path(__file__).resolve().parent
-    bindir = bindir.parent
-    with pyhmmer.plan7.HMMFile(
-        str(Path(bindir, "db", "hkgfinder.hmm"))
-    ) as hmm_file:
-        with pyhmmer.easel.SequenceFile(seqdata, digital=True) as seq_file:
-            if target_size < available_memory * 0.1:
-                logging.info("Pre-fetching targets into memory")
-                targets = seq_file.read_block()
-                mem = sys.getsizeof(targets) + sum(
-                    sys.getsizeof(target) for target in targets
-                )
-                mem = mem / 1024
-                logging.info(
-                    "Database in-memory size: {:.1f} KiB".format(mem),
-                )
-            else:
-                targets = seq_file
+        # Check Alphabet of supplied sequences
+        if args.file.name == "<stdin>":
+            fa = pyfastx.Fasta(str(Path(tmpdir, "hkgfinder_input.fa")))
+        else:
+            fa = pyfastx.Fasta(args.file.name)
 
-            HMMResult = namedtuple(
-                "HMMResult",
-                [
-                    "hmm_id",
-                    "hmm_desc",
-                    "hit_id",
-                    "evalue",
-                    "bitscore",
-                ],
+        fatype = fa.type
+
+        if args.g and fatype == "protein":
+            logging.error("Cannot run genome mode on proteins")
+            sys.exit(1)
+
+        if args.m and fatype == "protein":
+            logging.error("Cannot run metagenome mode on proteins")
+            sys.exit(1)
+
+        if fatype not in ["DNA", "protein"]:
+            logging.error("Supplied file should be a DNA or protein file")
+            sys.exit(1)
+
+        if fatype == "protein" and args.fna:
+            logging.error(
+                "Cannot retrieve matching DNA sequences from protein file. Remove --fna"
             )
+            sys.exit(1)
 
-            for hits in pyhmmer.hmmer.hmmsearch(
-                hmm_file,
-                targets,  # type: ignore
-                cpus=cpus,  # type: ignore
-                bit_cutoffs="gathering",  # type: ignore
-            ):
-                hmm_id = hits.query_name
-                hmm_desc = HMMDESC[str(hmm_id, encoding="utf-8")]  # type: ignore
-                for hit in hits:
-                    if hit.included:
-                        results.append(
-                            HMMResult(
-                                str(hmm_id, encoding="utf-8"),  # type: ignore
-                                hmm_desc,
-                                str(hit.name, encoding="utf-8"),
-                                hit.evalue,  # type: ignore
-                                hit.score,  # type: ignore
+        if len(fa.longest) >= 10000 and not args.g:
+            logging.error(
+                "Sequence length greater than 10000 bp. Do you want genome mode?"
+            )
+            sys.exit(1)
+
+        # Check if fasta file does not contain duplicate sequences
+        # which would break hmmsearch
+        ids = fa.keys()
+        if len(ids) != len(set(ids)):
+            logging.error("Supplied FASTA file contains duplicate sequences.")
+            try:
+                os.remove(f"{args.file.name}.fxi")
+            except OSError:
+                pass
+            sys.exit(1)
+
+        # Start program ---------------------------------------------------------
+        logging.info("This is hkgfinder %s", VERSION)
+        logging.info("Written by %s", AUTHOR)
+        logging.info("Available at %s", URL)
+        logging.info("Localtime is %s", datetime.now().strftime("%H:%M:%S"))
+        logging.info("You are %s", user)
+        logging.info("Operating system is %s", platform.system())
+        if args.g:
+            logging.info("You are running hkgfinder in genome mode")
+        elif args.m:
+            logging.info("You are running hkgfinder in metagenome mode")
+        else:
+            logging.info("You are running kgfinder in normal mode")
+
+        # Handling number of threads -----------------------------------------------
+        available_cpus = os.cpu_count()
+        logging.info("System has %s cores", available_cpus)
+        cpus = 1
+        available_cpus = os.cpu_count()
+        if args.t == 0:
+            cpus = available_cpus
+        elif args.t > available_cpus:
+            logging.warning(
+                "Option -t asked for %s threads but system has only %s",
+                args.t,
+                available_cpus,
+            )
+            cpus = available_cpus
+
+        logging.info("We will use maximum of %s cores", cpus)
+
+        # Running tools -----------------------------------------------------------
+        # In genome mode ----------------------------------------------------------
+        if args.g:
+            logging.info("Predicting protein-coding genes")
+            records = SeqIO.index(
+                str(Path(tmpdir, "hkgfinder_input.fa")), "fasta"
+            )
+            orf_finder = pyrodigal.OrfFinder()
+            orf_finder.train(
+                *(bytes(record.seq) for record in records.values())
+            )
+            with open(
+                Path(tmpdir, "my.proteins.faa"), "w+", encoding="utf-8"
+            ) as prot_file:
+                for seq in records.values():
+                    for i, prediction in enumerate(
+                        orf_finder.find_genes(bytes(seq.seq))
+                    ):
+                        prot = prediction.translate()
+                        prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
+
+            if args.fna:
+                with open(
+                    Path(tmpdir, "my.dna.fna"), "w+", encoding="utf-8"
+                ) as dna_file:
+                    for seq in records.values():
+                        for i, prediction in enumerate(
+                            orf_finder.find_genes(bytes(seq.seq))
+                        ):
+                            dna = prediction
+                            dna_file.write(f">{seq.id}_{i+1}\n{dna}\n")
+
+        # In metagenome mode ------------------------------------------------------
+        elif args.m:
+            logging.info("Predicting protein-coding genes")
+            records = SeqIO.index(
+                str(Path(tmpdir, "hkgfinder_input.fa")), "fasta"
+            )
+            orf_finder = pyrodigal.OrfFinder(meta=True)
+            with open(
+                Path(tmpdir, "my.proteins.faa"), "w+", encoding="utf-8"
+            ) as prot_file:
+                for seq in records.values():
+                    for i, prediction in enumerate(
+                        orf_finder.find_genes(bytes(seq.seq))
+                    ):
+                        prot = prediction.translate()
+                        prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
+
+            if args.fna:
+                with open(
+                    Path(tmpdir, "my.dna.fna"), "w+", encoding="utf-8"
+                ) as dna_file:
+                    for seq in records.values():
+                        for i, prediction in enumerate(
+                            orf_finder.find_genes(bytes(seq.seq))
+                        ):
+                            dna = prediction
+                            dna_file.write(f">{seq.id}_{i+1}\n{dna}\n")
+
+        # In normal mode ----------------------------------------------------------
+        else:
+            if fatype == "DNA":
+                logging.info("Translating sequences into 6 frames")
+
+                # translate sequences
+                utils.do_translation(
+                    str(Path(tmpdir, "hkgfinder_input.fa")),
+                    Path(tmpdir, "input_translate.fa"),
+                )
+                fa = pyfastx.Fasta(str(Path(tmpdir, "input_translate.fa")))
+                if len(fa.longest) >= 10000 and not args.g:
+                    logging.error(
+                        "Seq length greater than 10000 bp. Do you want genome mode?"
+                    )
+                    sys.exit(1)
+
+        # Classifying sequences into housekeeping genes
+        logging.info("Classifying sequences into housekeeping genes")
+        if args.g or args.m:
+            seqdata = Path(tmpdir, "my.proteins.faa")
+        else:
+            if fatype == "protein":
+                seqdata = Path(tmpdir, "hkgfinder_input.fa")
+            else:
+                seqdata = Path(tmpdir, "input_translate.fa")
+
+        results = []
+        best_results = {}
+        available_memory = psutil.virtual_memory().available
+        target_size = os.stat(seqdata).st_size
+        # importlib.resources.open_binary(__name__, "hkgfinder.hmm")
+        bindir = Path(__file__).resolve().parent
+        bindir = bindir.parent
+        with pyhmmer.plan7.HMMFile(
+            str(Path(bindir, "db", "hkgfinder.hmm"))
+        ) as hmm_file:
+            with pyhmmer.easel.SequenceFile(seqdata, digital=True) as seq_file:
+                if target_size < available_memory * 0.1:
+                    logging.info("Pre-fetching targets into memory")
+                    targets = seq_file.read_block()
+                    mem = sys.getsizeof(targets) + sum(
+                        sys.getsizeof(target) for target in targets
+                    )
+                    mem = mem / 1024
+                    logging.info(
+                        "Database in-memory size: %s KiB", f"{mem:.1f}"
+                    )
+                else:
+                    targets = seq_file
+
+                HMMResult = namedtuple(
+                    "HMMResult",
+                    [
+                        "hmm_id",
+                        "hmm_desc",
+                        "hit_id",
+                        "evalue",
+                        "bitscore",
+                    ],
+                )
+
+                for hits in pyhmmer.hmmer.hmmsearch(
+                    hmm_file,
+                    targets,  # type: ignore
+                    cpus=cpus,  # type: ignore
+                    bit_cutoffs="gathering",  # type: ignore
+                ):
+                    hmm_id = hits.query_name
+                    hmm_desc = HMMDESC[str(hmm_id, encoding="utf-8")]  # type: ignore
+                    for hit in hits:
+                        if hit.included:
+                            results.append(
+                                HMMResult(
+                                    str(hmm_id, encoding="utf-8"),  # type: ignore
+                                    hmm_desc,
+                                    str(hit.name, encoding="utf-8"),
+                                    hit.evalue,  # type: ignore
+                                    hit.score,  # type: ignore
+                                )
                             )
-                        )
 
-                # Second iteration over output file to get evalues and hsps
-                # logging.info("Parsing HMM result", is_quiet)
-                for result in results:
-                    if result.hit_id in best_results:
-                        previous_bitscore = best_results[result.hit_id].bitscore
-                        if result.bitscore > previous_bitscore:
+                    # Second iteration over output file to get evalues and hsps
+                    # logging.info("Parsing HMM result", is_quiet)
+                    for result in results:
+                        if result.hit_id in best_results:
+                            previous_bitscore = best_results[
+                                result.hit_id
+                            ].bitscore
+                            if result.bitscore > previous_bitscore:
+                                best_results[result.hit_id] = result
+                        else:
                             best_results[result.hit_id] = result
-                    else:
-                        best_results[result.hit_id] = result
 
-    # Write output ------------------------------------------------------------
-    filtered_results = [best_results[k] for k in sorted(best_results)]
+        # Write output ------------------------------------------------------------
+        filtered_results = [best_results[k] for k in sorted(best_results)]
 
-    logging.info("Writing output")
-    if args.o.name != "<stdout>":
-        with open(args.o.name, "w", encoding="utf-8") as ofile:
+        logging.info("Writing output")
+        if args.o.name != "<stdout>":
+            with open(args.o.name, "w", encoding="utf-8") as ofile:
+                print(
+                    "seq_name\tpred_gene\tgene_desc\te-value\tbitscore",
+                    file=ofile,
+                )
+                for result in filtered_results:
+                    print(
+                        result.hit_id,
+                        result.hmm_id,
+                        result.hmm_desc,
+                        f"{result.evalue:.3f}",
+                        f"{result.bitscore:.3f}",
+                        sep="\t",
+                        file=ofile,
+                    )
+        else:
             print(
-                "seq_name\tpred_gene\tgene_desc\te-value\tbitscore",
-                file=ofile,
+                "seq_name\tseq_desc\tpred_gene\tgene_desc\te-value\tbitscore",
             )
             for result in filtered_results:
                 print(
@@ -421,124 +435,112 @@ def main():
                     f"{result.evalue:.3f}",
                     f"{result.bitscore:.3f}",
                     sep="\t",
-                    file=ofile,
                 )
-    else:
-        print(
-            "seq_name\tseq_desc\tpred_gene\tgene_desc\te-value\tbitscore",
-        )
-        for result in filtered_results:
-            print(
-                result.hit_id,
-                result.hmm_id,
-                result.hmm_desc,
-                f"{result.evalue:.3f}",
-                f"{result.bitscore:.3f}",
-                sep="\t",
-            )
-    # Get matched proteins
-    if args.faa or args.fna:
-        newline = "\n"
+        # Get matched proteins
+        if args.faa or args.fna:
+            newline = "\n"
 
-        if args.g or args.m:
-            prots = pyfastx.Fasta(
-                str(Path(hkgfinder_temp.name, "my.proteins.faa"))
-            )
-        else:
-            if fatype == "protein":
-                prots = fa
-            else:
-                prots = pyfastx.Fasta(
-                    str(Path(hkgfinder_temp.name, "input_translate.fa"))
-                )
-
-        if args.s:
-            sorted(filtered_results, key=attrgetter("hit_id"))
-
-        if args.faa:
-            logging.info("Writing out predicted proteins sequences")
-
-            if args.s:
-                for result in filtered_results:
-                    with open(
-                        f"{os.path.splitext(args.faa)[0]}_{result.hmm_id}.faa",
-                        "a",
-                        encoding="utf-8",
-                    ) as out:
-                        seq = [
-                            prots[result.hit_id].seq[i : i + 60]
-                            for i in range(0, len(prots[result.hit_id]), 60)
-                        ]
-                        out.write(
-                            f">{result.hit_id}_gene={result.hmm_id}"
-                            + f"\n{newline.join(map(str, seq))}\n"
-                        )
-            else:
-                with open(
-                    f"{os.path.splitext(args.faa)[0]}.faa",
-                    "w",
-                    encoding="utf-8",
-                ) as out:
-                    for result in filtered_results:
-                        seq = [
-                            prots[result.hit_id].seq[i : i + 60]
-                            for i in range(0, len(prots[result.hit_id]), 60)
-                        ]
-                        out.write(
-                            f">{result.hit_id}_gene={result.hmm_id}\n"
-                            + f"{newline.join(map(str, seq))}\n"
-                        )
-        if args.fna:
-            logging.info("Writing out predicted DNA sequences")
             if args.g or args.m:
-                dna_file = pyfastx.Fasta(
-                    str(Path(hkgfinder_temp.name, "my.dna.fna"))
-                )
+                prots = pyfastx.Fasta(str(Path(tmpdir, "my.proteins.faa")))
             else:
-                dna_file = pyfastx.Fasta(args.file)
+                if fatype == "protein":
+                    prots = fa
+                else:
+                    prots = pyfastx.Fasta(
+                        str(Path(tmpdir, "input_translate.fa"))
+                    )
 
             if args.s:
-                for result in filtered_results:
+                sorted(filtered_results, key=attrgetter("hit_id"))
+
+            if args.faa:
+                logging.info("Writing out predicted proteins sequences")
+
+                if args.s:
+                    for result in filtered_results:
+                        with open(
+                            f"{os.path.splitext(args.faa)[0]}_{result.hmm_id}.faa",
+                            "a",
+                            encoding="utf-8",
+                        ) as out:
+                            seq = [
+                                prots[result.hit_id].seq[i : i + 60]
+                                for i in range(0, len(prots[result.hit_id]), 60)
+                            ]
+                            out.write(
+                                f">{result.hit_id}_gene={result.hmm_id}"
+                                + f"\n{newline.join(map(str, seq))}\n"
+                            )
+                else:
                     with open(
-                        f"{os.path.splitext(args.faa)[0]}_{result.hmm_id}.fna",
+                        f"{os.path.splitext(args.faa)[0]}.faa",
+                        "w",
+                        encoding="utf-8",
+                    ) as out:
+                        for result in filtered_results:
+                            seq = [
+                                prots[result.hit_id].seq[i : i + 60]
+                                for i in range(0, len(prots[result.hit_id]), 60)
+                            ]
+                            out.write(
+                                f">{result.hit_id}_gene={result.hmm_id}\n"
+                                + f"{newline.join(map(str, seq))}\n"
+                            )
+            if args.fna:
+                logging.info("Writing out predicted DNA sequences")
+                if args.g or args.m:
+                    dna_file = pyfastx.Fasta(str(Path(tmpdir, "my.dna.fna")))
+                else:
+                    dna_file = pyfastx.Fasta(args.file)
+
+                if args.s:
+                    for result in filtered_results:
+                        with open(
+                            f"{os.path.splitext(args.faa)[0]}_{result.hmm_id}.fna",
+                            "a",
+                            encoding="utf-8",
+                        ) as out:
+                            seq = [
+                                dna_file[result.hit_id].seq[i : i + 60]
+                                for i in range(
+                                    0, len(dna_file[result.hit_id]), 60
+                                )
+                            ]
+                            out.write(
+                                f">{result.hit_id}_gene={result.hmm_id}\n"
+                                + f"{newline.join(map(str, seq))}\n"
+                            )
+                else:
+                    with open(
+                        f"{os.path.splitext(args.faa)[0]}.fna",
                         "a",
                         encoding="utf-8",
                     ) as out:
-                        seq = [
-                            dna_file[result.hit_id].seq[i : i + 60]
-                            for i in range(0, len(dna_file[result.hit_id]), 60)
-                        ]
-                        out.write(
-                            f">{result.hit_id}_gene={result.hmm_id}\n"
-                            + f"{newline.join(map(str, seq))}\n"
-                        )
-            else:
-                with open(
-                    f"{os.path.splitext(args.faa)[0]}.fna",
-                    "a",
-                    encoding="utf-8",
-                ) as out:
-                    for result in filtered_results:
-                        seq = [
-                            dna_file[result.hit_id].seq[i : i + 60]
-                            for i in range(0, len(dna_file[result.hit_id]), 60)
-                        ]
-                        out.write(
-                            f">{result.hit_id}_gene={result.hmm_id}\n"
-                            + f"{newline.join(map(str, seq))}\n"
-                        )
+                        for result in filtered_results:
+                            seq = [
+                                dna_file[result.hit_id].seq[i : i + 60]
+                                for i in range(
+                                    0, len(dna_file[result.hit_id]), 60
+                                )
+                            ]
+                            out.write(
+                                f">{result.hit_id}_gene={result.hmm_id}\n"
+                                + f"{newline.join(map(str, seq))}\n"
+                            )
 
-    # Cleaning around ---------------------------------------------------------
-    try:
-        os.remove(f"{args.file.name}.fxi")
-    except OSError:
-        pass
-    logging.info("Task finished successfully")
-    logging.info("Walltime used (hh:mm:ss.ms): %s", datetime.now() - startime)
-    if randrange(0, 100000) % 2:
-        logging.info("Nice to have you. Share, enjoy and come back!")
-    else:
-        logging.info("Thanks you, come again.")
+        # Cleaning around ---------------------------------------------------------
+        try:
+            os.remove(f"{args.file.name}.fxi")
+        except OSError:
+            pass
+        logging.info("Task finished successfully")
+        logging.info(
+            "Walltime used (hh:mm:ss.ms): %s", datetime.now() - startime
+        )
+        if randrange(0, 100000) % 2:
+            logging.info("Nice to have you. Share, enjoy and come back!")
+        else:
+            logging.info("Thanks you, come again.")
 
 
 if __name__ == "__main__":
