@@ -234,11 +234,11 @@ def main():
 
         # Check Alphabet of supplied sequences
         if args.file.name == "<stdin>":
-            fa = pyfastx.Fasta(str(Path(tmpdir, "hkgfinder_input.fa")))
+            fasta = pyfastx.Fasta(str(Path(tmpdir, "hkgfinder_input.fa")))
         else:
-            fa = pyfastx.Fasta(args.file.name)
+            fasta = pyfastx.Fasta(args.file.name)
 
-        fatype = fa.type
+        fatype = fasta.type
 
         if args.g and fatype == "protein":
             logging.error("Cannot run genome mode on proteins")
@@ -258,7 +258,7 @@ def main():
             )
             sys.exit(1)
 
-        if len(fa.longest) >= 10000 and not args.g:
+        if len(fasta.longest) >= 10000 and not args.g:
             logging.error(
                 "Sequence length greater than 10000 bp. Do you want genome mode?"
             )
@@ -266,7 +266,7 @@ def main():
 
         # Check if fasta file does not contain duplicate sequences
         # which would break hmmsearch
-        ids = fa.keys()
+        ids = fasta.keys()
         if len(ids) != len(set(ids)):
             logging.error("Supplied FASTA file contains duplicate sequences.")
             try:
@@ -303,6 +303,8 @@ def main():
                 available_cpus,
             )
             cpus = available_cpus
+        else:
+            cpus = args.t
 
         logging.info("We will use maximum of %s cores", cpus)
 
@@ -321,22 +323,16 @@ def main():
                 Path(tmpdir, "my.proteins.faa"), "w+", encoding="utf-8"
             ) as prot_file:
                 for seq in records.values():
-                    for i, prediction in enumerate(
-                        orf_finder.find_genes(bytes(seq.seq))
-                    ):
-                        prot = prediction.translate()
-                        prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
+                    prediction = orf_finder.find_genes(bytes(seq.seq))
+                    prediction.write_translations(prot_file, seq.id)
 
             if args.fna:
                 with open(
                     Path(tmpdir, "my.dna.fna"), "w+", encoding="utf-8"
                 ) as dna_file:
                     for seq in records.values():
-                        for i, prediction in enumerate(
-                            orf_finder.find_genes(bytes(seq.seq))
-                        ):
-                            dna = prediction
-                            dna_file.write(f">{seq.id}_{i+1}\n{dna}\n")
+                        prediction = orf_finder.find_genes(bytes(seq.seq))
+                        prediction.write_genes(dna_file, seq.id)
 
         # In metagenome mode ------------------------------------------------------
         elif args.m:
@@ -447,7 +443,6 @@ def main():
                                     hit.score,  # type: ignore
                                 )
                             )
-
                     # Second iteration over output file to get evalues and hsps
                     # logging.info("Parsing HMM result", is_quiet)
                     for result in results:
@@ -501,7 +496,7 @@ def main():
                 prots = pyfastx.Fasta(str(Path(tmpdir, "my.proteins.faa")))
             else:
                 if fatype == "protein":
-                    prots = fa
+                    prots = fasta
                 else:
                     prots = pyfastx.Fasta(
                         str(Path(tmpdir, "input_translate.fa"))
