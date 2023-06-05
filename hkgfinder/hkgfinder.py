@@ -6,6 +6,7 @@
 # to those terms.
 
 import argparse
+import importlib.resources
 import logging
 import os
 import platform
@@ -92,6 +93,7 @@ parser.add_argument(
 parser.add_argument(
     "-q", action="store_true", help="decrease program verbosity"
 )
+parser.add_argument("-d", action="store_true", help="enable debug mode")
 parser.add_argument(
     "-v", "--version", action="version", version="%(prog)s " + f"{VERSION}"
 )
@@ -393,12 +395,19 @@ def main():
         best_results = {}
         available_memory = psutil.virtual_memory().available
         target_size = os.stat(seqdata).st_size
-        # importlib.resources.open_binary(__name__, "hkgfinder.hmm")
-        bindir = Path(__file__).resolve().parent
-        bindir = bindir.parent
-        with pyhmmer.plan7.HMMFile(
-            str(Path(bindir, "db", "hkgfinder.hmm"))
-        ) as hmm_file:
+
+        if not args.d:
+            hmm = importlib.resources.open_binary(__name__, "hkgfinder.hmm")
+        else:
+            bindir = Path(__file__).resolve().parent
+            bindir = bindir.parent
+            if Path(bindir, "db", "hkgfinder.hmm").exists:
+                hmm = str(Path(bindir, "db", "hkgfinder.hmm"))
+            else:
+                logging.error("HMM file not found. Do you want debug mode?")
+                sys.exit(1)
+
+        with pyhmmer.plan7.HMMFile(hmm) as hmm_file:
             with pyhmmer.easel.SequenceFile(seqdata, digital=True) as seq_file:
                 if target_size < available_memory * 0.1:
                     logging.info("Pre-fetching targets into memory")
