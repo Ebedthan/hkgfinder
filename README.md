@@ -13,47 +13,19 @@
 ### Introduction
 hkgfinder is a fast and accurate housekeeping gene finder and classifier. hkgfinder can run on raw sequences, genomes and metagenomes. The novel value of this method lies is in its ability to directly predict and classify gene sequences into housekeeping gene families at a high specificity and sensitivity, while being also faster than genome and metagenome annotator on genome and metagenome data.
 
-**hkgfinder since v0.2 is without external dependencies.**
-
 
 ### How hkgfinder works
 ![](img/hkgfinder.png)
 
 ### Installation
 
-You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run hkgfinder.
+~~You will have first to install [Prodigal](https://github.com/hyattpd/Prodigal) and [HMMER 3](https://hmmer.org) to be able to run hkgfinder.~~
 
+**hkgfinder since v0.2 is without external dependencies.**
 
-#### Install from Pip
 
 ```bash
 pip install hkgfinder
-```
-
-
-#### Install from source
-
-```bash
-# Download hkgfinder development version
-git clone https://github.com/Ebedthan/hkgfinder.git hkgfinder
-
-# Navigate to directory
-cd hkgfinder
-
-# Install with poetry: see https://python-poetry.org
-poetry install --no-dev
-
-# Enter the Python virtual environment with
-poetry shell
-
-# Test hkgfinder is correctly installed
-hkgfinder -h
-```
-
-If you do not want to go into the virtual environment just do:
-
-```bash
-poetry run hkgfinder -h
 ```
 
 ## Test
