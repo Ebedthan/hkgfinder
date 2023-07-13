@@ -31,7 +31,7 @@ from Bio.Seq import reverse_complement, translate
 
 AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
 URL = "https://github.com/Ebedthan/hkgfinder"
-VERSION = "0.1"
+VERSION = "0.2"
 
 # Define command-line arguments----------------------------------------------
 parser = argparse.ArgumentParser(
@@ -235,11 +235,7 @@ def main():
                         binput.write(line)  # type: ignore
 
         # Check Alphabet of supplied sequences
-        if args.file.name == "<stdin>":
-            fasta = pyfastx.Fasta(str(Path(tmpdir, "hkgfinder_input.fa")))
-        else:
-            fasta = pyfastx.Fasta(args.file.name)
-
+        fasta = pyfastx.Fasta(str(Path(tmpdir, "hkgfinder_input.fa")))
         fatype = fasta.type
 
         if args.g and fatype == "protein":
@@ -262,7 +258,7 @@ def main():
 
         if len(fasta.longest) >= 10000 and not args.g:
             logging.error(
-                "Sequence length greater than 10000 bp. Do you want genome mode?"
+                "Sequence length greater than 10000 bp. Do you want genome mode (-g)?"
             )
             sys.exit(1)
 
