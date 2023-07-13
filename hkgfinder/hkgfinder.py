@@ -392,8 +392,10 @@ def main():
         available_memory = psutil.virtual_memory().available
         target_size = os.stat(seqdata).st_size
 
+        hmm = importlib.resources.open_binary(__package__, "hkgfinder.hmm")
+        """
         if not args.d:
-            hmm = importlib.resources.open_binary(__name__, "hkgfinder.hmm")
+            hmm = importlib.resources.open_binary(__package__, "hkgfinder.hmm")
         else:
             bindir = Path(__file__).resolve().parent
             bindir = bindir.parent
@@ -402,7 +404,7 @@ def main():
             else:
                 logging.error("HMM file not found. Do you want debug mode?")
                 sys.exit(1)
-
+        """
         with pyhmmer.plan7.HMMFile(hmm) as hmm_file:
             with pyhmmer.easel.SequenceFile(seqdata, digital=True) as seq_file:
                 if target_size < available_memory * 0.1:
