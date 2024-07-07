@@ -24,7 +24,7 @@ from . import cli, hkglib
 
 AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
 URL = "https://github.com/Ebedthan/hkgfinder"
-VERSION = "0.2"
+VERSION = "0.3"
 
 args = cli.args
 
