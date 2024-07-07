@@ -39,8 +39,8 @@ pyhmmer = "^0.8.0"
 [tool.poetry.scripts]
 hkgfinder = "hkgfinder.hkgfinder:main"
 
-[tool.poetry.group.dev.dependencies]
-black = "^23.3.0"
+[tool.ruff.lint]
+select = ["ALL"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
