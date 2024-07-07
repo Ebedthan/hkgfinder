@@ -43,7 +43,7 @@ def main() -> None:
     """Contains the main hkgfinder program."""
     # Preparing the environment -----------------------------------------------
     # Record the program start time
-    startime = datetime.datetime.now(tz=datetime.UTC)
+    startime = datetime.datetime.now(tz=datetime.timezone.utc)
 
     # Get current user name
     try:
@@ -102,7 +102,7 @@ def main() -> None:
         logging.info("Available at %s", URL)
         logging.info(
             "Localtime is %s",
-            datetime.datetime.now(tz=datetime.UTC).strftime("%H:%M:%S"),
+            datetime.datetime.now(tz=datetime.timezone.utc).strftime("%H:%M:%S"),
         )
         logging.info("You are %s", user)
         logging.info("Operating system is %s", platform.system())
@@ -272,7 +272,7 @@ def main() -> None:
         logging.info("Task finished successfully")
         logging.info(
             "Walltime used (hh:mm:ss.ms): %s",
-            datetime.datetime.now(tz=datetime.UTC) - startime,
+            datetime.datetime.now(tz=datetime.timezone.utc) - startime,
         )
         if randrange(0, 100000) % 2:  # noqa: S311
             logging.info("Nice to have you. Share, enjoy and come back!")
