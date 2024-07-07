@@ -40,6 +40,48 @@ HMMDESC = {
 }
 
 
+def write_sequences(
+    base_filename: str,
+    filtered_results: list,
+    seqs: dict,
+    *,
+    split: bool,
+    is_prot: bool,
+) -> None:
+    """Write sequences to output files based on the filtering results.
+
+    Args:
+    ----
+    base_filename: Base filename.
+    filtered_results: List of filtered result objects.
+    seqs: Dictionary containing protein sequences.
+    split: Boolean indicating whether to split output into separate files.
+    is_prot: Boolean indicating the type of sequence to write.
+
+    """
+    newline = "\n"
+    ext = "faa" if is_prot else "fna"
+
+    if split:
+        for result in filtered_results:
+            filepath = Path(f"{base_filename}_{result.hmm_id}.{ext}")
+            with filepath.open("a", encoding="utf-8") as out:
+                seq = seqs[result.hit_id].seq
+                formatted_seq = [seq[i : i + 60] for i in range(0, len(seq), 60)]
+                out.write(
+                    f">{result.hit_id}_gene={result.hmm_id}\n{newline.join(formatted_seq)}\n",
+                )
+    else:
+        filepath = Path(f"{base_filename}.{ext}")
+        with filepath.open("w", encoding="utf-8") as out:
+            for result in filtered_results:
+                seq = seqs[result.hit_id].seq
+                formatted_seq = [seq[i : i + 60] for i in range(0, len(seq), 60)]
+                out.write(
+                    f">{result.hit_id}_gene={result.hmm_id}\n{newline.join(formatted_seq)}\n",
+                )
+
+
 def write_results(
     output_path: Path,
     filtered_results: list,
@@ -137,7 +179,7 @@ def find_protein_coding_genes(
     outdir: str,
     *,
     is_meta: bool = False,
-    save_coding_genes_dna: bool,
+    save_both: bool,
 ) -> None:
     """Find protein coding genes using pyrodigal."""
     records = SeqIO.index(infile, "fasta")
@@ -147,25 +189,19 @@ def find_protein_coding_genes(
         Path(outdir, "my.proteins.faa"),
         "w+",
         encoding="utf-8",
-    ) as prot_file:
-        for seq in records.values():
-            for i, prediction in enumerate(
-                orf_finder.find_genes(bytes(seq.seq)),
-            ):
-                prot = prediction.translate()
-                prot_file.write(f">{seq.id}_{i+1}\n{prot}\n")
-    if save_coding_genes_dna:
+    ) as out:
+        for seqid, seq in records.items():
+            genes = orf_finder.find_genes(bytes(seq.seq))
+            genes.write_translations(out, sequence_id=seqid, width=60)
+    if save_both:
         with Path.open(
             Path(outdir, "my.dna.fna"),
             "w+",
             encoding="utf-8",
-        ) as dna_file:
-            for seq in records.values():
-                for i, prediction in enumerate(
-                    orf_finder.find_genes(bytes(seq.seq)),
-                ):
-                    dna = prediction
-                    dna_file.write(f">{seq.id}_{i+1}\n{dna}\n")
+        ) as out:
+            for seqid, seq in records.items():
+                genes = orf_finder.find_genes(bytes(seq.seq))
+                genes.write_genes(out, sequence_id=seqid, width=60)
 
 
 def handle_cpus(asked_cpus: int, available_cpus: int | None) -> int:

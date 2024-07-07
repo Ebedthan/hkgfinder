@@ -127,7 +127,7 @@ def main() -> None:
             hkglib.find_protein_coding_genes(
                 str(uncompressed_input),
                 tmpdir,
-                save_coding_genes_dna=args.fna,
+                save_both=bool(args.fna),
             )
 
         # In metagenome mode ------------------------------------------------------
@@ -136,7 +136,7 @@ def main() -> None:
                 str(uncompressed_input),
                 tmpdir,
                 is_meta=True,
-                save_coding_genes_dna=args.fna,
+                save_both=bool(args.fna),
             )
 
         # In normal mode ----------------------------------------------------------
@@ -179,8 +179,6 @@ def main() -> None:
 
         # Get matched proteins
         if args.faa or args.fna:
-            newline = "\n"
-
             if args.g or args.m:
                 prots = pyfastx.Fasta(str(Path(tmpdir, "my.proteins.faa")))
             elif fatype == "protein":
@@ -193,78 +191,28 @@ def main() -> None:
 
             if args.faa:
                 logging.info("Writing out predicted proteins sequences")
+                hkglib.write_sequences(
+                    os.path.splitext(args.faa)[0],
+                    filtered_results,
+                    prots,
+                    split=args.s,
+                    is_prot=True,
+                )
 
-                if args.s:
-                    for result in filtered_results:
-                        with Path.open(
-                            Path(
-                                f"{os.path.splitext(args.faa)[0]}_{result.hmm_id}.faa",
-                            ),
-                            "a",
-                            encoding="utf-8",
-                        ) as out:
-                            seq = [
-                                prots[result.hit_id].seq[i : i + 60]
-                                for i in range(0, len(prots[result.hit_id]), 60)
-                            ]
-                            out.write(
-                                f">{result.hit_id}_gene={result.hmm_id}"
-                                f"\n{newline.join(map(str, seq))}\n",
-                            )
-                else:
-                    with Path.open(
-                        Path(f"{os.path.splitext(args.faa)[0]}.faa"),
-                        "w",
-                        encoding="utf-8",
-                    ) as out:
-                        for result in filtered_results:
-                            seq = [
-                                prots[result.hit_id].seq[i : i + 60]
-                                for i in range(0, len(prots[result.hit_id]), 60)
-                            ]
-                            out.write(
-                                f">{result.hit_id}_gene={result.hmm_id}\n"
-                                f"{newline.join(map(str, seq))}\n",
-                            )
             if args.fna:
                 logging.info("Writing out predicted DNA sequences")
                 if args.g or args.m:
-                    dna_file = pyfastx.Fasta(str(Path(tmpdir, "my.dna.fna")))
+                    dnas = pyfastx.Fasta(str(Path(tmpdir, "my.dna.fna")))
                 else:
-                    dna_file = pyfastx.Fasta(args.file)
+                    dnas = pyfastx.Fasta(args.file)
 
-                if args.s:
-                    for result in filtered_results:
-                        with Path.open(
-                            Path(
-                                f"{os.path.splitext(args.faa)[0]}_{result.hmm_id}.fna",
-                            ),
-                            "a",
-                            encoding="utf-8",
-                        ) as out:
-                            seq = [
-                                dna_file[result.hit_id].seq[i : i + 60]
-                                for i in range(0, len(dna_file[result.hit_id]), 60)
-                            ]
-                            out.write(
-                                f">{result.hit_id}_gene={result.hmm_id}\n"
-                                f"{newline.join(map(str, seq))}\n",
-                            )
-                else:
-                    with Path.open(
-                        Path(f"{os.path.splitext(args.faa)[0]}.fna"),
-                        "a",
-                        encoding="utf-8",
-                    ) as out:
-                        for result in filtered_results:
-                            seq = [
-                                dna_file[result.hit_id].seq[i : i + 60]
-                                for i in range(0, len(dna_file[result.hit_id]), 60)
-                            ]
-                            out.write(
-                                f">{result.hit_id}_gene={result.hmm_id}\n"
-                                f"{newline.join(map(str, seq))}\n",
-                            )
+                hkglib.write_sequences(
+                    os.path.splitext(args.fna)[0],
+                    filtered_results,
+                    dnas,
+                    split=args.s,
+                    is_prot=False,
+                )
 
         # Cleaning around ---------------------------------------------------------
         with contextlib.suppress(OSError):
