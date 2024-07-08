@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-VERSION = "0.2"
+VERSION = "0.3"
 
 # Define command-line arguments----------------------------------------------
 parser = argparse.ArgumentParser(
@@ -11,7 +11,6 @@ parser = argparse.ArgumentParser(
     usage="hkgfinder [options] [<FILE>]",
     add_help=False,
 )
-
 parser.add_argument(
     "file",
     nargs="?",
