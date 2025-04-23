@@ -1,3 +1,5 @@
-.vscode
-hkgfinder/__pycache__
+.venv
+.python-version
+src/hkgfinder/__pycache__
 dist
+.ruff_cache
