@@ -3,3 +3,5 @@
 src/hkgfinder/__pycache__
 dist
 .ruff_cache
+uv.lock
+.zed

@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Optional, Union
 
 import psutil
-import pyfastx
 import pyhmmer
 import pyrodigal
 from Bio import SeqIO
 from Bio.Seq import reverse_complement, translate
+from pyfastxcli import pyfastx
 
 # Constants
 HMMDESC = {
@@ -70,7 +70,8 @@ def write_sequences(
 
     def format_sequence(seq_id: str, hmm_id: str, sequence: str) -> str:
         chunks = [
-            sequence[i : i + SEQ_WIDTH] for i in range(0, len(sequence), SEQ_WIDTH)
+            sequence[i : i + SEQ_WIDTH]
+            for i in range(0, len(sequence), SEQ_WIDTH)
         ]
         return f">{seq_id}_gene={hmm_id}\n" + "\n".join(chunks) + "\n"
 
@@ -98,7 +99,9 @@ def write_sequences(
             buffer = []
             for result in filtered_results:
                 seq = seqs[result.hit_id].seq
-                buffer.append(format_sequence(result.hit_id, result.hmm_id, seq))
+                buffer.append(
+                    format_sequence(result.hit_id, result.hmm_id, seq)
+                )
                 if len(buffer) >= 100:
                     out.write("".join(buffer))
                     buffer = []
@@ -309,7 +312,9 @@ def decompress_file(
                 compression = "lzma"
 
     if compression is None:
-        raise ValueError(f"Cannot determine compression format for {input_path}")
+        raise ValueError(
+            f"Cannot determine compression format for {input_path}"
+        )
 
     # Decompress the file
     decompressors = {
@@ -353,9 +358,13 @@ def do_translation(infile: str, outfile: Path, sw: int = 60) -> None:
                 warnings.simplefilter("ignore")
                 protseq = _translate_seq(sequence.seq)
                 for idx, frame in enumerate(protseq, 1):
-                    chunks = [frame[i : i + sw] for i in range(0, len(frame), sw)]
+                    chunks = [
+                        frame[i : i + sw] for i in range(0, len(frame), sw)
+                    ]
                     buffer.append(
-                        f">{sequence.name}_frame={idx}\n" + "\n".join(chunks) + "\n"
+                        f">{sequence.name}_frame={idx}\n"
+                        + "\n".join(chunks)
+                        + "\n"
                     )
                     if len(buffer) >= 100:
                         protfile.write("".join(buffer))
