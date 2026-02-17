@@ -8,6 +8,7 @@ import importlib.resources
 import logging
 import lzma
 import multiprocessing.pool
+import os
 import shutil
 import sys
 import warnings
@@ -45,6 +46,21 @@ HMMDESC = {
 }
 BUFFER_SIZE = 1024 * 1024  # 1 MB buffer
 SEQ_WIDTH = 60
+
+
+def setup_logging(quiet: bool) -> None:
+    """Configure logging for the application."""
+    level = logging.CRITICAL if quiet else logging.INFO
+    logging.basicConfig(
+        format="[%(asctime)s][%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+        level=level,
+    )
+
+
+def get_username() -> str:
+    """Get current username safely."""
+    return os.environ.get("USER", os.environ.get("USERNAME", "unknown user"))
 
 
 def write_sequences(

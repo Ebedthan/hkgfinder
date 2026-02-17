@@ -21,17 +21,17 @@ from tempfile import TemporaryDirectory
 from pyfastxcli import pyfastx
 from xopen import xopen
 
-from . import cli, hkglib
+from . import hkglib
+from .cli import get_args
+from .config import create_config
 
 AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
 URL = "https://github.com/Ebedthan/hkgfinder"
 VERSION = "0.3"
 
-args = cli.args
-
 MAX_SEQ_LENGTH = 10000
 
-QUIETNESS_LEVEL = logging.CRITICAL if args.q else logging.INFO
+QUIETNESS_LEVEL = logging.CRITICAL  # if args.q else logging.INFO
 
 logging.basicConfig(
     format="[%(asctime)s][%(levelname)s] %(message)s",
@@ -42,6 +42,11 @@ logging.basicConfig(
 
 def main() -> None:
     """Contains the main hkgfinder program."""
+    args = get_args()
+
+    # Create config from CLI args
+    config = create_config(args)
+
     # Preparing the environment -----------------------------------------------
     # Record the program start time
     startime = datetime.datetime.now(tz=datetime.timezone.utc)
@@ -237,5 +242,6 @@ def main() -> None:
                 else:
                     logging.info("Thanks you, come again.")
 
-    if __name__ == "__main__":
-        main()
+
+if __name__ == "__main__":
+    main()

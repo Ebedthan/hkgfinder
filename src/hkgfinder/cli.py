@@ -61,7 +61,36 @@ parser.add_argument(
     default=1,
     help="number of threads [1]",
 )
-parser.add_argument("-q", action="store_true", help="decrease program verbosity")
+
+parser.add_argument(
+    "--profile",
+    type=str,
+    choices=["default", "large-genome", "metagenome"],
+    default="default",
+    help="use preset configuration [default]",
+)
+
+# Create advanced setting group
+advanced = parser.add_argument_group(
+    "Advanced Options", "Options to fine-tune the program"
+)
+advanced.add_argument(
+    "--max-seq-length",
+    type=int,
+    metavar="INT",
+    default=10000,
+    help="maximum sequence length in bp before suggesting genome mode [10000]",
+)
+advanced.add_argument(
+    "--buffer-size",
+    type=int,
+    metavar="INT",
+    default=1024 * 1024,  # 1 MB
+    help="I/O buffer size in MB [1]",
+)
+parser.add_argument(
+    "-q", action="store_true", help="decrease program verbosity"
+)
 parser.add_argument("-d", action="store_true", help="enable debug mode")
 parser.add_argument(
     "-v",
@@ -77,4 +106,6 @@ parser.add_argument(
 )
 parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
-args = parser.parse_args()
+
+def get_args():
+    return parser.parse_args()
