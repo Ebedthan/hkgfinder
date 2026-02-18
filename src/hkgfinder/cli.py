@@ -70,6 +70,20 @@ parser.add_argument(
     help="use preset configuration [default]",
 )
 
+parser.add_argument(
+    "--genbank",
+    type=str,
+    metavar="FILE",
+    help="output matched sequences to GenBank format FILE [false]",
+)
+
+parser.add_argument(
+    "--organism",
+    type=str,
+    metavar="NAME",
+    help="organism name for GenBank output",
+)
+
 # Create advanced setting group
 advanced = parser.add_argument_group(
     "Advanced Options", "Options to fine-tune the program"
