@@ -5,3 +5,4 @@ dist
 .ruff_cache
 uv.lock
 .zed
+tests/__pycache__
