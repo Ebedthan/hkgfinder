@@ -6,241 +6,125 @@
 # Licensed under the MIT license (http://opensource.org/licenses/MIT)
 # This file may not be copied, modified, or distributed except according
 # to those terms.
-
 import contextlib
 import datetime
 import logging
-import os
-import platform
 import sys
-from operator import attrgetter
 from pathlib import Path
-from random import randrange
 from tempfile import TemporaryDirectory
 
 from pyfastxcli import pyfastx
 from xopen import xopen
 
+from hkgfinder.hmm_search import HMMSearcher
+from hkgfinder.validation import InputValidator
+from hkgfinder.writers import ResultWriter
+
 from . import hkglib
 from .cli import get_args
 from .config import create_config
 
-AUTHOR = "Anicet Ebou <anicet.ebou@gmail.com>"
-URL = "https://github.com/Ebedthan/hkgfinder"
-VERSION = "0.3"
-
-MAX_SEQ_LENGTH = 10000
-
-QUIETNESS_LEVEL = logging.CRITICAL  # if args.q else logging.INFO
-
-logging.basicConfig(
-    format="[%(asctime)s][%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-    level=QUIETNESS_LEVEL,
-)
-
 
 def main() -> None:
-    """Contains the main hkgfinder program."""
+    """Main hkgfinder program."""
     args = get_args()
 
     # Create config from CLI args
     config = create_config(args)
 
-    # Preparing the environment -----------------------------------------------
-    # Record the program start time
+    # Setup
+    hkglib.setup_logging(args.q)
     startime = datetime.datetime.now(tz=datetime.timezone.utc)
 
-    # Get current user name
+    # determine run mode
+    run_mode = hkglib.determine_run_mode(args)
+
+    if args.s and not args.faa and not args.fna and not args.genbank:
+        logging.warning(
+            "Unecessary -s option in absence of --faa, --fna or --genbank"
+        )
+
     try:
-        user = os.environ["USER"]
-    except KeyError:
-        user = "not telling me who you are"
-    # Handling CLI arguments ---------------------------------------------
-    if args.s and not args.faa and not args.fna:
-        logging.warning("Unecessary -s option in absence of --faa or --fna")
-
-    # Create a temporary directory
-    with TemporaryDirectory() as tmpdir:
-        with xopen(str(args.file.name)) as uncompressed_input:
-            # Check Alphabet of supplied sequences
-            fasta = pyfastx.Fasta(uncompressed_input.name)
-            fatype = fasta.type
-
-            if args.g and fatype == "protein":
-                logging.error("Cannot run genome mode on proteins")
-                sys.exit(1)
-
-            if args.m and fatype == "protein":
-                logging.error("Cannot run metagenome mode on proteins")
-                sys.exit(1)
-
-            if fatype not in ["DNA", "protein"]:
-                logging.error("Supplied file should be a DNA or protein file")
-                sys.exit(1)
-
-            if fatype == "protein" and args.fna:
-                logging.error(
-                    "Cannot retrieve matching DNA sequences from protein file. Remove --fna",
-                )
-                sys.exit(1)
-
-            if len(fasta.longest) >= MAX_SEQ_LENGTH and not args.g:
-                logging.error(
-                    "Sequence length greater than %s bp. Do you want genome mode (-g)?",
-                    MAX_SEQ_LENGTH,
-                )
-                sys.exit(1)
-
-            # Check if fasta file does not contain duplicate sequences
-            # which would break hmmsearch
-            ids = fasta.keys()
-            if len(ids) != len(set(ids)):
-                logging.error(
-                    "Supplied FASTA file contains duplicate sequences."
-                )
-                with contextlib.suppress(OSError):
-                    Path.unlink(Path(f"{args.file.name}.fxi"))
-                sys.exit(1)
-
-            # Start program ---------------------------------------------------------
-            logging.info("This is hkgfinder %s", VERSION)
-            logging.info("Written by %s", AUTHOR)
-            logging.info("Available at %s", URL)
-            logging.info(
-                "Localtime is %s",
-                datetime.datetime.now(tz=datetime.timezone.utc).strftime(
-                    "%H:%M:%S"
-                ),
-            )
-            logging.info("You are %s", user)
-            logging.info("Operating system is %s", platform.system())
-            if args.g:
-                logging.info("You are running hkgfinder in genome mode")
-            elif args.m:
-                logging.info("You are running hkgfinder in metagenome mode")
-            else:
-                logging.info("You are running kgfinder in normal mode")
-
-            # Handling number of threads -----------------------------------------------
-            available_cpus = os.cpu_count()
-            logging.info("System has %s cores", available_cpus)
-
-            cpus = hkglib.handle_cpus(args.t, available_cpus)
-            logging.info("We will use maximum of %s cores", cpus)
-
-            # Running tools -----------------------------------------------------------
-            logging.info("Predicting protein-coding genes")
-            # In genome mode ----------------------------------------------------------
-            if args.g:
-                hkglib.find_protein_coding_genes(
-                    uncompressed_input.name,
-                    tmpdir,
-                    args.t,
-                    save_both=bool(args.fna),
+        with TemporaryDirectory() as tmpdir:
+            with xopen(str(args.file.name)) as uncompressed_input:
+                # validate input file
+                validator = InputValidator()
+                validation = validator.validate_fasta_file(
+                    uncompressed_input.name, run_mode, config
                 )
 
-            # In metagenome mode ------------------------------------------------------
-            elif args.m:
-                hkglib.find_protein_coding_genes(
-                    uncompressed_input.name,
-                    tmpdir,
-                    args.t,
-                    is_meta=True,
-                    save_both=bool(args.fna),
-                )
-
-            # In normal mode ----------------------------------------------------------
-            elif fatype == "DNA":
-                logging.info("Translating sequences into 6 frames")
-
-                # translate sequences
-                hkglib.do_translation(
-                    uncompressed_input.name,
-                    Path(tmpdir, "input_translate.fa"),
-                )
-                fa = pyfastx.Fasta(str(Path(tmpdir, "input_translate.fa")))
-                if len(fa.longest) >= MAX_SEQ_LENGTH and not args.g:
-                    logging.error(
-                        "Seq length greater than 10000 bp. Do you want genome mode?",
-                    )
+                if not validation.is_valid:
+                    logging.error(validation.error_message)
                     sys.exit(1)
 
-            # Classifying sequences into housekeeping genes
-            logging.info("Classifying sequences into housekeeping genes")
-            if args.g or args.m:
-                seqdata = Path(tmpdir, "my.proteins.faa")
-            elif fatype == "protein":
-                seqdata = uncompressed_input
-            else:
-                seqdata = Path(tmpdir, "input_translate.fa")
+                if validation.warnings is not None:
+                    for warning in validation.warnings:
+                        logging.warning(warning)
 
-            # Run HMM
-            best_results = hkglib.search_hmm(Path(str(seqdata)), cpus)
-
-            # Write output ------------------------------------------------------------
-            filtered_results = [best_results[k] for k in sorted(best_results)]
-
-            logging.info("Writing output")
-            hkglib.write_results(
-                Path(args.o.name),
-                filtered_results,
-                to_stdout=(args.o.name == "<stdout>"),
-            )
-
-            # Get matched proteins
-            if args.faa or args.fna:
-                if args.g or args.m:
-                    prots = pyfastx.Fasta(str(Path(tmpdir, "my.proteins.faa")))
-                elif fatype == "protein":
-                    prots = fasta
-                else:
-                    prots = pyfastx.Fasta(
-                        str(Path(tmpdir, "input_translate.fa"))
-                    )
-
-                if args.s:
-                    sorted(filtered_results, key=attrgetter("hit_id"))
-
-                if args.faa:
-                    logging.info("Writing out predicted proteins sequences")
-                    hkglib.write_sequences(
-                        str(os.path.splitext(args.faa)[0]),
-                        filtered_results,
-                        prots,
-                        split=args.s,
-                        is_prot=True,
-                    )
-
-                if args.fna:
-                    logging.info("Writing out predicted DNA sequences")
-                    if args.g or args.m:
-                        dnas = pyfastx.Fasta(str(Path(tmpdir, "my.dna.fna")))
-                    else:
-                        dnas = pyfastx.Fasta(args.file)
-
-                    hkglib.write_sequences(
-                        str(os.path.splitext(args.fna)[0]),
-                        filtered_results,
-                        dnas,
-                        split=args.s,
-                        is_prot=False,
-                    )
-
-            # Cleaning around ---------------------------------------------------------
-            with contextlib.suppress(OSError):
-                Path.unlink(Path(f"{args.file.name}.fxi"))
-                logging.info("Task finished successfully")
-                logging.info(
-                    "Walltime used (hh:mm:ss.ms): %s",
-                    datetime.datetime.now(tz=datetime.timezone.utc) - startime,
+                # Validate output compatibility
+                output_validation = validator.validate_output_compatibility(
+                    validation.sequence_type, bool(args.fna), run_mode
                 )
-                if randrange(0, 100000) % 2:  # noqa: S311
-                    logging.info(
-                        "Nice to have you. Share, enjoy and come back!"
-                    )
-                else:
-                    logging.info("Thanks you, come again.")
+
+                if not output_validation.is_valid:
+                    logging.error(output_validation.error_message)
+                    sys.exit(1)
+
+                # llog startup info
+                hkglib.log_startup_info(config, run_mode)
+
+                # determine CPU count
+                num_cpus = hkglib.determine_cpu_count(args.t)
+
+                # create processing context
+                ctx = hkglib.ProcessingContext(
+                    input_file=uncompressed_input.name,
+                    temp_dir=tmpdir,
+                    num_cpus=num_cpus,
+                    run_mode=run_mode,
+                    sequence_type=validation.sequence_type,
+                    save_dna=bool(args.fna),
+                    save_protein=bool(args.faa),
+                    split_output=bool(args.s),
+                )
+
+                # Process sequences
+                processed_file = hkglib.process_sequences(ctx, config, tmpdir)
+
+                # Run HMM search
+                logging.info("Classifying sequences into housekeeping genes")
+                searcher = HMMSearcher(num_cpus)
+                best_results = searcher.search(processed_file, config)
+
+                # sort and write main results
+                filtered_results = [
+                    best_results[k] for k in sorted(best_results)
+                ]
+
+                logging.info("Writing output")
+                ResultWriter.write_results(
+                    Path(args.o.name),
+                    filtered_results,
+                    to_stdout=(args.o.name == "<stdout>"),
+                )
+
+                # write sequence outputs if requested
+                original_fasta = pyfastx.Fasta(uncompressed_input.name)
+                hkglib.write_output_sequences(
+                    args, filtered_results, tmpdir, ctx, original_fasta, config
+                )
+    except Exception as e:
+        logging.error(f"Fatal error: {e}", exc_info=args.debug)
+        sys.exit(1)
+
+    finally:
+        with contextlib.suppress(OSError):
+            Path.unlink(Path(f"{args.file.name}.fxi"))
+
+    # success message
+    elapsed = datetime.datetime.now(tz=datetime.timezone.utc) - startime
+    logging.info("Task finished successfully")
+    logging.info(f"Walltime used (hh:mm:ss:ms): {elapsed}")
 
 
 if __name__ == "__main__":

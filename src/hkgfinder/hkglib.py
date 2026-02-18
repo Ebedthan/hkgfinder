@@ -3,49 +3,29 @@
 from __future__ import annotations
 
 import bz2
+import datetime
 import gzip
-import importlib.resources
 import logging
 import lzma
 import multiprocessing.pool
 import os
+import platform
 import shutil
 import sys
 import warnings
-from collections import namedtuple
 from pathlib import Path
 from typing import Optional, Union
 
-import psutil
-import pyhmmer
 import pyrodigal
 from Bio import SeqIO
 from Bio.Seq import reverse_complement, translate
 from pyfastxcli import pyfastx
 
-# Constants
-HMMDESC = {
-    "MnmE": "tRNA uridine-5-carboxymethylaminomethyl(34) synthesis GTPase MnmE",
-    "DnaK": "Molecular chaperonne DnaK",
-    "GyrB": "DNA topoisomerase (ATP-hydrolyzing) subunit B",
-    "RecA": "recombinase RecA",
-    "rpoB": "DNA-directed RNA polymerase subunit beta",
-    "infB": "translation initiation factor IF-2",
-    "atpD": "F0F1 ATP synthase subunit beta",
-    "GroEL": "chaperonin GroEL",
-    "fusA": "Elongation factor G",
-    "ileS": "isoleucine--tRNA ligase",
-    "lepA": "translation elongation factor 4",
-    "leuS_bact": "leucine--tRNA ligase bacteria",
-    "leuS_arch": "leucine--tRNA ligase archaea",
-    "PyrG": "CTP synthase (glutamine hydrolyzing)",
-    "recG": "ATP-dependent DNA helicase RecG",
-    "rplB_bact": "50S ribosomal protein L2",
-    "nifH": "nitrogenase iron protein",
-    "nodC": "chitooligosaccharide synthase NodC",
-}
-BUFFER_SIZE = 1024 * 1024  # 1 MB buffer
-SEQ_WIDTH = 60
+from hkgfinder.models import RunMode
+
+from .config import HKGFinderConfig
+from .models import ProcessingContext, SequenceType
+from .writers import GenBankWriter, SequenceWriter
 
 
 def setup_logging(quiet: bool) -> None:
@@ -63,66 +43,173 @@ def get_username() -> str:
     return os.environ.get("USER", os.environ.get("USERNAME", "unknown user"))
 
 
-def write_sequences(
-    base_filename: str,
-    filtered_results: list,
-    seqs: dict,
-    *,
-    split: bool,
-    is_prot: bool,
-) -> None:
-    """Write sequences to output files based on the filtering results.
+def log_startup_info(config: HKGFinderConfig, run_mode: RunMode) -> None:
+    """Log startup information."""
+    logging.info("This is hkgfinder %s", config.VERSION)
+    logging.info("Written by %s", config.AUTHOR)
+    logging.info("Available at %s", config.URL)
+    logging.info(
+        "Localtime is %s",
+        datetime.datetime.now(tz=datetime.timezone.utc).strftime("%H:%M:%S"),
+    )
+    logging.info("You are %s", get_username())
+    logging.info("Operating system is %s", platform.system())
+    logging.info("You are running hkgfinder in %s mode", run_mode.value)
 
-    Args:
-    ----
-    base_filename: Base filename.
-    filtered_results: List of filtered result objects.
-    seqs: Dictionary containing protein sequences.
-    split: Boolean indicating whether to split output into separate files.
-    is_prot: Boolean indicating the type of sequence to write.
 
-    """
-    ext = "faa" if is_prot else "fna"
-
-    def format_sequence(seq_id: str, hmm_id: str, sequence: str) -> str:
-        chunks = [
-            sequence[i : i + SEQ_WIDTH]
-            for i in range(0, len(sequence), SEQ_WIDTH)
-        ]
-        return f">{seq_id}_gene={hmm_id}\n" + "\n".join(chunks) + "\n"
-
-    if split:
-        # Group results by hmm_id to minimize file opens
-        grouped = {}
-        for result in filtered_results:
-            grouped.setdefault(result.hmm_id, []).append(result)
-
-        for hmm_id, results in grouped.items():
-            filepath = Path(f"{base_filename}_{hmm_id}.{ext}")
-            with filepath.open("a", encoding="utf-8") as out:
-                buffer = []
-                for result in results:
-                    seq = seqs[result.hit_id].seq
-                    buffer.append(format_sequence(result.hit_id, hmm_id, seq))
-                    if len(buffer) >= 100:  # Write in chunks of 100 sequences
-                        out.write("".join(buffer))
-                        buffer = []
-                if buffer:
-                    out.write("".join(buffer))
+def determine_run_mode(args) -> RunMode:
+    """Determine execution mode from arguments."""
+    if args.g:
+        return RunMode.GENOME
+    elif args.m:
+        return RunMode.METAGENOME
     else:
-        filepath = Path(f"{base_filename}.{ext}")
-        with filepath.open("w", encoding="utf-8") as out:
-            buffer = []
-            for result in filtered_results:
-                seq = seqs[result.hit_id].seq
-                buffer.append(
-                    format_sequence(result.hit_id, result.hmm_id, seq)
-                )
-                if len(buffer) >= 100:
-                    out.write("".join(buffer))
-                    buffer = []
-            if buffer:
-                out.write("".join(buffer))
+        return RunMode.NORMAL
+
+
+def determine_cpu_count(requested: int) -> int:
+    """Determine number of CPUs to use."""
+    available_cpus = os.cpu_count()
+    logging.info("System has %s cores", available_cpus)
+
+    cpus = _handle_cpus(requested, available_cpus)
+    logging.info("We will use maximum of %s cores", cpus)
+
+    return cpus
+
+
+def process_sequences(
+    ctx: ProcessingContext,
+    config: HKGFinderConfig,
+    tmpdir: str,
+) -> Path:
+    """
+    Process sequences based on run mode.
+
+    Returns:
+        Path to processed sequence file
+    """
+    # Genome or metagenome mode - predict genes
+    if ctx.run_mode in (RunMode.GENOME, RunMode.METAGENOME):
+        logging.info("Predicting protein-coding genes")
+        find_protein_coding_genes(
+            ctx.input_file,
+            tmpdir,
+            ctx.num_cpus,
+            is_meta=(ctx.run_mode == RunMode.METAGENOME),
+            save_both=ctx.save_dna,
+        )
+        return Path(tmpdir, "my.proteins.faa")
+
+    # Normal mode with DNA - translate
+    elif ctx.sequence_type == SequenceType.DNA:
+        logging.info("Translating sequences into 6 frames")
+        output_path = Path(tmpdir, "input_translate.fa")
+        do_translation(ctx.input_file, output_path)
+
+        # Validate translated sequences aren't too long
+        fa = pyfastx.Fasta(str(output_path))
+        if len(fa.longest) >= config.max_seq_length:
+            logging.error(
+                "Translated sequence length exceeds %s bp. Consider genome mode (-g)?",
+                config.max_seq_length,
+            )
+            sys.exit(1)
+
+        return output_path
+
+    # Normal mode with protein - use directly
+    else:
+        return Path(ctx.input_file)
+
+
+def write_output_sequences(
+    args,
+    filtered_results: list,
+    tmpdir: str,
+    ctx: ProcessingContext,
+    original_fasta,
+    config: HKGFinderConfig,
+) -> None:
+    """Write output sequences if requested."""
+    if not (args.faa or args.fna or args.genbank):
+        return
+
+    # Load protein sequences
+    if ctx.run_mode in (RunMode.GENOME, RunMode.METAGENOME):
+        proteins = pyfastx.Fasta(str(Path(tmpdir, "my.proteins.faa")))
+    elif ctx.sequence_type == SequenceType.PROTEIN:
+        proteins = original_fasta
+    else:
+        proteins = pyfastx.Fasta(str(Path(tmpdir, "input_translate.fa")))
+
+    # Sort if requested
+    if args.s:
+        filtered_results.sort(key=lambda r: r.hit_id)
+
+    # Write protein sequences
+    if args.faa:
+        logging.info("Writing predicted protein sequences")
+        writer = SequenceWriter(
+            os.path.splitext(args.faa)[0],
+            "faa",
+            args.s,
+            config,
+        )
+        writer.write_sequences(filtered_results, proteins)
+
+    # Write DNA sequences
+    if args.fna:
+        logging.info("Writing predicted DNA sequences")
+        if ctx.run_mode in (RunMode.GENOME, RunMode.METAGENOME):
+            dna_sequences = pyfastx.Fasta(str(Path(tmpdir, "my.dna.fna")))
+        else:
+            dna_sequences = original_fasta
+
+        writer = SequenceWriter(
+            os.path.splitext(args.fna)[0],
+            "fna",
+            args.s,
+            config,
+        )
+        writer.write_sequences(filtered_results, dna_sequences)
+
+    # Write GenBank format
+    if args.genbank:
+        logging.info("Writing sequences in GenBank format")
+
+        # Determine if we're writing proteins or DNA
+        if args.faa or ctx.sequence_type == SequenceType.PROTEIN:
+            # Write protein GenBank
+            gb_writer = GenBankWriter(
+                os.path.splitext(args.genbank)[0],
+                args.s,
+                config,
+            )
+            gb_writer.write_genbank(
+                filtered_results,
+                proteins,
+                is_protein=True,
+                organism=args.organism,
+            )
+        else:
+            # Write DNA GenBank
+            if ctx.run_mode in (RunMode.GENOME, RunMode.METAGENOME):
+                dna_sequences = pyfastx.Fasta(str(Path(tmpdir, "my.dna.fna")))
+            else:
+                dna_sequences = original_fasta
+
+            gb_writer = GenBankWriter(
+                os.path.splitext(args.genbank)[0],
+                args.s,
+                config,
+            )
+            gb_writer.write_genbank(
+                filtered_results,
+                dna_sequences,
+                is_protein=False,
+                organism=args.organism,
+            )
 
 
 def write_results(
@@ -153,69 +240,6 @@ def write_results(
         print(output)
     else:
         output_path.write_text(output, encoding="utf-8")
-
-
-def search_hmm(seqdata: Path, cpus: int) -> dict:
-    """Search HMM and return best results."""
-    results = []
-    best_results = {}
-
-    # Memory check optimization
-    available_memory = psutil.virtual_memory().available
-    target_size = seqdata.stat().st_size
-    should_prefetch = target_size < available_memory * 0.1
-
-    hmm_path = importlib.resources.files("hkgfinder").joinpath("hkgfinder.hmm")
-    with (
-        hmm_path.open("rb") as hmm,
-        pyhmmer.plan7.HMMFile(
-            hmm,  # type: ignore[type-supported]
-        ) as hmm_file,
-        pyhmmer.easel.SequenceFile(seqdata, digital=True) as seq_file,
-    ):
-        # Pre-fetch targets into memory if size is appropriate
-        if should_prefetch:
-            logging.info("Pre-fetching targets into memory")
-            targets = seq_file.read_block()
-            mem_kb = sum(sys.getsizeof(target) for target in targets) / 1024
-            logging.info("Database in-memory size: %.1f KiB", mem_kb)
-        else:
-            targets = seq_file
-
-        HMMResult = namedtuple(
-            "HMMResult",
-            ["hmm_id", "hmm_desc", "hit_id", "evalue", "bitscore"],
-        )
-
-        # Process hits in bulk
-        for hits in pyhmmer.hmmer.hmmsearch(
-            hmm_file,
-            targets,  # type: ignore[type-supported]
-            cpus=cpus,
-            bit_cutoffs="gathering",  # type: ignore[type-supported]
-        ):
-            hmm_id = hits.query.name.decode("utf-8")
-            hmm_desc = HMMDESC[hmm_id]
-
-            for hit in hits:
-                if hit.included:
-                    results.append(
-                        HMMResult(
-                            hmm_id,  # type: ignore[type-supported]
-                            hmm_desc,
-                            hit.name.decode("utf-8"),
-                            hit.evalue,
-                            hit.score,
-                        ),
-                    )
-
-        # Find best results based on bitscore
-        for result in results:
-            existing = best_results.get(result.hit_id)
-            if existing is None or result.bitscore > existing.bitscore:
-                best_results[result.hit_id] = result
-
-    return best_results
 
 
 def find_protein_coding_genes(
@@ -251,13 +275,13 @@ def find_protein_coding_genes(
                     gene.write_translations(prot_out, sequence_id="gene")
 
 
-def handle_cpus(asked_cpus: int, available_cpus: int | None) -> int:
+def _handle_cpus(asked_cpus: int, available_cpus: int | None) -> int:
     """Allocate the good number of CPUs based on asked cpus vs available cpus."""
     available = available_cpus or 1
     return min(max(1, asked_cpus), available) if asked_cpus > 0 else available
 
 
-def detect_compression(file_path: Union[str, Path]) -> Optional[str]:
+def _detect_compression(file_path: Union[str, Path]) -> Optional[str]:
     """Detect compression type by reading magic numbers from file header.
 
     Returns:
@@ -315,7 +339,7 @@ def decompress_file(
             compression = "lzma"
     else:
         # First try magic number detection
-        compression = detect_compression(input_path)
+        compression = _detect_compression(input_path)
 
         # Fall back to extension detection if magic number fails
         if compression is None:
