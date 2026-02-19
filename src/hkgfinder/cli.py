@@ -1,9 +1,14 @@
+# Copyright 2022-2026 Anicet Ebou.
+# Licensed under the MIT license (http://opensource.org/licenses/MIT)
+# This file may not be copied, modified, or distributed except according
+# to those terms.
+
 """CLI program."""
 
 import argparse
 import sys
 
-VERSION = "0.3"
+VERSION = "0.4"
 
 # Define command-line arguments----------------------------------------------
 parser = argparse.ArgumentParser(
@@ -84,40 +89,26 @@ parser.add_argument(
     help="organism name for GenBank output",
 )
 
-# Create advanced setting group
-advanced = parser.add_argument_group(
-    "Advanced Options", "Options to fine-tune the program"
-)
-advanced.add_argument(
-    "--max-seq-length",
-    type=int,
-    metavar="INT",
-    default=10000,
-    help="maximum sequence length in bp before suggesting genome mode [10000]",
-)
-advanced.add_argument(
-    "--buffer-size",
-    type=int,
-    metavar="INT",
-    default=1024 * 1024,  # 1 MB
-    help="I/O buffer size in MB [1]",
-)
 parser.add_argument(
     "-q", action="store_true", help="decrease program verbosity"
 )
+
 parser.add_argument("-d", action="store_true", help="enable debug mode")
+
 parser.add_argument(
     "-v",
     "--version",
     action="version",
     version="%(prog)s " + f"{VERSION}",
 )
+
 parser.add_argument(
     "-h",
     "--help",
     action="help",
     help="show this help message and exit",
 )
+
 parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
 

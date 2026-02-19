@@ -1,3 +1,8 @@
+# Copyright 2022-2026 Anicet Ebou.
+# Licensed under the MIT license (http://opensource.org/licenses/MIT)
+# This file may not be copied, modified, or distributed except according
+# to those terms.
+
 """Configuration management for hkgfinder."""
 
 from dataclasses import dataclass
@@ -13,7 +18,7 @@ class HKGFinderConfig:
     AUTHOR: str = "Anicet Ebou <anicet dot ebou at gmail.com>"
     URL: str = "https://github.com/Ebedthan/hkgfinder"
 
-    # Processing limits (can be overriden via CLI)
+    # Processing limits
     max_seq_length: int = 10_000
     buffer_size: int = 1024 * 1024  # 1 MB
     seq_width: int = 60
@@ -60,12 +65,5 @@ def create_config(args) -> HKGFinderConfig:
         max_seq_length=preset["max_seq_length"],
         buffer_size=preset["buffer_size"] * 1024 * 1024,
     )
-
-    # Overide with CLI arguments if provided
-    if args.max_seq_length != 10000:
-        config.max_seq_length = args.max_seq_length
-
-    if args.buffer_size != 1024 * 1024:
-        config.buffer_size = args.buffer_size * 1024 * 1024
 
     return config
